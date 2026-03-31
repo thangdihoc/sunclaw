@@ -1,0 +1,11 @@
+[package]
+name = "sunclaw-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+sunclaw-app = { path = "../sunclaw-app" }
+sunclaw-core = { path = "../sunclaw-core" }

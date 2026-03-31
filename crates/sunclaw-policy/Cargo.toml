@@ -1,0 +1,12 @@
+[package]
+name = "sunclaw-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+sunclaw-core = { path = "../sunclaw-core" }
+
+[dev-dependencies]
+tokio.workspace = true

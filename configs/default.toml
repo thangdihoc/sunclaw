@@ -1,0 +1,16 @@
+[runtime]
+max_turns = 4
+max_tool_calls = 2
+
+[provider]
+default = "mock"
+
+[policy]
+profile = "baseline"
+
+[policy.skill_rules]
+general = ["echo"]
+research = ["echo", "search"]
+
+[orchestrator]
+default_flow = "planner-executor-reviewer"
