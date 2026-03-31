@@ -35,6 +35,16 @@ profile=reasoning
 (turns=1, tool_calls=0)
 ```
 
+
+## Progress reporting
+
+Sunclaw now keeps a persistent progress tracker in `STATUS.md`.
+After each completed implementation step, update:
+- current completion percent,
+- what was finished,
+- next 3 planned tasks,
+- blockers/risks.
+
 ## Development checks
 
 ```bash
