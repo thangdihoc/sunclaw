@@ -13,7 +13,10 @@ async fn main() -> Result<()> {
     let input = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "hello sunclaw".to_string());
-    let out = runtime.run_once(&ctx, &input).await?;
-    println!("{out}");
+    let outcome = runtime.run_once(&ctx, &input).await?;
+    println!(
+        "{}\n(turns={}, tool_calls={})",
+        outcome.output, outcome.turns, outcome.tool_calls
+    );
     Ok(())
 }

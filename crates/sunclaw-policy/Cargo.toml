@@ -7,3 +7,6 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 sunclaw-core = { path = "../sunclaw-core" }
+
+[dev-dependencies]
+tokio.workspace = true

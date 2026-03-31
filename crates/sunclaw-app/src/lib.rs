@@ -3,18 +3,22 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use sunclaw_core::{
-    AgentContext, CoreError, Decision, MemoryStore, Message, ModelProvider, Tool, ToolCall,
-    ToolResult,
+    AgentContext, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message, ModelProvider,
+    Tool, ToolCall, ToolResult,
 };
 use sunclaw_policy::AllowlistPolicy;
-use sunclaw_runtime::Runtime;
+use sunclaw_runtime::{Runtime, RuntimeOptions};
 
 pub fn build_runtime() -> Runtime {
     let provider = Arc::new(MockProvider);
     let memory = Arc::new(InMemoryStore::default());
     let policy = Arc::new(AllowlistPolicy::new(vec!["echo".into()]));
+    let audit = Arc::new(InMemoryAuditStore::default());
 
-    let mut runtime = Runtime::new(provider, memory, policy);
+    let mut runtime = Runtime::new(provider, memory, policy, audit).with_options(RuntimeOptions {
+        max_turns: 4,
+        max_tool_calls: 2,
+    });
     runtime.register_tool(Arc::new(EchoTool));
     runtime
 }
@@ -33,14 +37,18 @@ impl ModelProvider for MockProvider {
             .map(|m| m.content.clone())
             .unwrap_or_else(|| "hello".to_string());
 
-        if last.starts_with("tool:") {
-            Ok(Decision::UseTool(ToolCall {
+        if let Some(input) = last.strip_prefix("tool:") {
+            return Ok(Decision::UseTool(ToolCall {
                 name: "echo".into(),
-                input: last.replacen("tool:", "", 1).trim().to_string(),
-            }))
-        } else {
-            Ok(Decision::Reply(format!("Sunclaw received: {last}")))
+                input: input.trim().to_string(),
+            }));
         }
+
+        if last.starts_with("tool:echo =>") {
+            return Ok(Decision::Reply(format!("Tool completed: {last}")));
+        }
+
+        Ok(Decision::Reply(format!("Sunclaw received: {last}")))
     }
 }
 
@@ -55,7 +63,7 @@ impl MemoryStore for InMemoryStore {
         let guard = self
             .data
             .lock()
-            .map_err(|e| CoreError::Provider(format!("lock error: {e}")))?;
+            .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?;
         Ok(guard.get(trace_id).cloned().unwrap_or_default())
     }
 
@@ -63,8 +71,24 @@ impl MemoryStore for InMemoryStore {
         let mut guard = self
             .data
             .lock()
-            .map_err(|e| CoreError::Provider(format!("lock error: {e}")))?;
+            .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?;
         guard.entry(trace_id.to_string()).or_default().push(message);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct InMemoryAuditStore {
+    events: Mutex<Vec<AuditEvent>>,
+}
+
+#[async_trait]
+impl AuditStore for InMemoryAuditStore {
+    async fn append_event(&self, event: AuditEvent) -> Result<(), CoreError> {
+        self.events
+            .lock()
+            .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?
+            .push(event);
         Ok(())
     }
 }

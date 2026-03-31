@@ -1,15 +1,20 @@
 # Sunclaw
 
-Sunclaw is a Rust-first AI agent runtime with a plugin core, policy enforcement, and role-based orchestration.
+Sunclaw is a Rust-first AI agent runtime with:
+- plugin-based core contracts,
+- runtime guardrails (turn/tool limits),
+- allowlist policy with optional skill-level restrictions,
+- auditable tool decisions,
+- role-based team flow primitives.
 
-## Current scaffold
+## Workspace crates
 
-- `sunclaw-core`: shared contracts and domain types.
-- `sunclaw-runtime`: single-pass runtime loop.
-- `sunclaw-policy`: allowlist policy implementation.
-- `sunclaw-orchestrator`: planner/executor/reviewer flow model.
-- `sunclaw-skills`: skill manifest schema.
-- `sunclaw-app`: composition root with mock provider + memory + tool.
+- `sunclaw-core`: shared contracts, domain types, and error types.
+- `sunclaw-runtime`: runtime execution loop (provider/policy/tool/memory/audit).
+- `sunclaw-policy`: allowlist-based policy engine.
+- `sunclaw-orchestrator`: planner/executor/reviewer team flow schema.
+- `sunclaw-skills`: skill manifest schema + validation.
+- `sunclaw-app`: composition root using in-memory adapters.
 - `sunclaw-cli`: executable demo.
 
 ## Quick start
@@ -19,9 +24,24 @@ cargo run -p sunclaw-cli -- "hello"
 cargo run -p sunclaw-cli -- "tool: ping"
 ```
 
-## Next milestones
+Sample output:
 
-1. Replace mock provider with OpenAI-compatible provider crate.
-2. Replace in-memory store with SQLite + migrations.
-3. Add HTTP channel adapter and tracing.
-4. Add sandboxed tool execution.
+```txt
+Sunclaw received: hello
+(turns=1, tool_calls=0)
+```
+
+## Development checks
+
+```bash
+cargo fmt --all
+cargo test --workspace
+cargo run -p sunclaw-cli -- "tool: ping"
+```
+
+## Near-term roadmap
+
+1. Add OpenAI-compatible and Anthropic-compatible provider adapters.
+2. Add SQLite memory and durable audit storage.
+3. Add HTTP adapter and request tracing.
+4. Add sandboxed tool execution wrappers.

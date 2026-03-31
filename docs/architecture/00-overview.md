@@ -1,11 +1,16 @@
 # Sunclaw Architecture Overview
 
-Sunclaw follows a layered architecture:
+Sunclaw uses a trait-first architecture so integrations stay replaceable:
 
-1. Core contracts (`sunclaw-core`)
-2. Runtime engine (`sunclaw-runtime`)
-3. Policy and sandbox (`sunclaw-policy`, future `sunclaw-sandbox`)
-4. Skills and orchestration (`sunclaw-skills`, `sunclaw-orchestrator`)
-5. Delivery channels (`sunclaw-cli`, future HTTP/Telegram adapters)
+1. `sunclaw-core` defines contracts for provider, policy, tool, memory, and audit.
+2. `sunclaw-runtime` executes a guarded loop with turn/tool limits.
+3. `sunclaw-policy` validates tool permissions globally and by skill profile.
+4. `sunclaw-skills` validates manifest metadata (risk level, required tools).
+5. `sunclaw-orchestrator` models planner -> executor -> reviewer handoff flow.
+6. `sunclaw-app` wires in-memory demo adapters and exposes a runnable runtime.
 
-The intended flow is: inbound message -> orchestrator routing -> runtime decision -> policy gate -> tool/provider execution -> memory persistence -> outbound response.
+## Runtime loop
+
+`ingest user message -> provider decision -> policy gate -> tool execution -> persist system message -> provider decision ... -> final reply`
+
+The runtime stores audit events whenever tool calls are allowed/denied to keep decision history inspectable.

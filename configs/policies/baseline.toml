@@ -1,7 +1,5 @@
-[tools]
-allow = ["echo"]
-deny = ["shell", "filesystem_write", "network_raw"]
+[allowlist]
+allowed_tools = ["echo", "search", "calculator"]
 
-[runtime]
-tool_timeout_ms = 3000
-max_tool_output_bytes = 65536
+[denylist]
+blocked_tools = ["shell", "filesystem_write", "network_raw"]
