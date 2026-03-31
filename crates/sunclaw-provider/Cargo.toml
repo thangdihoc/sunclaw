@@ -1,5 +1,5 @@
 [package]
-name = "sunclaw-app"
+name = "sunclaw-provider"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,6 +7,6 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 sunclaw-core = { path = "../sunclaw-core" }
-sunclaw-policy = { path = "../sunclaw-policy" }
-sunclaw-provider = { path = "../sunclaw-provider" }
-sunclaw-runtime = { path = "../sunclaw-runtime" }
+
+[dev-dependencies]
+tokio.workspace = true

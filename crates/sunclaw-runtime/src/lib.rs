@@ -287,6 +287,7 @@ mod tests {
                 &AgentContext {
                     trace_id: "t-1".to_string(),
                     skill: Some("general".to_string()),
+                    model_profile: Some("default".to_string()),
                 },
                 "hello",
             )

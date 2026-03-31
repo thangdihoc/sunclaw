@@ -2,6 +2,7 @@
 members = [
   "crates/sunclaw-core",
   "crates/sunclaw-runtime",
+  "crates/sunclaw-provider",
   "crates/sunclaw-orchestrator",
   "crates/sunclaw-policy",
   "crates/sunclaw-skills",

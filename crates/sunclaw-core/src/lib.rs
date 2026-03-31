@@ -35,6 +35,7 @@ pub enum Decision {
 pub struct AgentContext {
     pub trace_id: String,
     pub skill: Option<String>,
+    pub model_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
