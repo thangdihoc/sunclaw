@@ -1,0 +1,21 @@
+[runtime]
+max_turns = 4
+max_tool_calls = 2
+
+[provider]
+default_profile = "default"
+
+[provider.routes]
+default = ["openrouter:deepseek-v3", "xai:grok-3-mini"]
+reasoning = ["openrouter:deepseek-r1", "google:gemini-2.5-pro"]
+cheap = ["google:gemini-2.5-flash", "openrouter:deepseek-v3"]
+
+[policy]
+profile = "baseline"
+
+[policy.skill_rules]
+general = ["echo"]
+research = ["echo", "search"]
+
+[orchestrator]
+default_flow = "planner-executor-reviewer"
