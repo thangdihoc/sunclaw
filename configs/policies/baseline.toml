@@ -1,0 +1,5 @@
+[allowlist]
+allowed_tools = ["echo", "search", "calculator"]
+
+[denylist]
+blocked_tools = ["shell", "filesystem_write", "network_raw"]
