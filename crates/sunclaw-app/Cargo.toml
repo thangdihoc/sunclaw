@@ -1,0 +1,11 @@
+[package]
+name = "sunclaw-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-policy = { path = "../sunclaw-policy" }
+sunclaw-runtime = { path = "../sunclaw-runtime" }

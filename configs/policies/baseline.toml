@@ -1,0 +1,7 @@
+[tools]
+allow = ["echo"]
+deny = ["shell", "filesystem_write", "network_raw"]
+
+[runtime]
+tool_timeout_ms = 3000
+max_tool_output_bytes = 65536

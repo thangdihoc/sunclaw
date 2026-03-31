@@ -1,0 +1,12 @@
+[agent]
+name = "sunclaw"
+default_skill = "general"
+max_steps = 6
+
+[provider]
+strategy = "primary_fallback"
+primary = "mock"
+fallback = []
+
+[policy]
+profile = "baseline"
