@@ -9,6 +9,13 @@ pub enum Role {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AgentRole {
+    Planner,
+    Executor,
+    Reviewer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Message {
     pub role: Role,
     pub content: String,
@@ -36,6 +43,7 @@ pub struct AgentContext {
     pub trace_id: String,
     pub skill: Option<String>,
     pub model_profile: Option<String>,
+    pub role: Option<AgentRole>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,7 +88,12 @@ pub trait Tool: Send + Sync {
 
 #[async_trait]
 pub trait PolicyEngine: Send + Sync {
-    async fn can_call_tool(&self, ctx: &AgentContext, tool_name: &str) -> Result<(), CoreError>;
+    async fn can_call_tool(
+        &self,
+        ctx: &AgentContext,
+        tool_name: &str,
+        tool_input: &str,
+    ) -> Result<(), CoreError>;
 }
 
 #[async_trait]

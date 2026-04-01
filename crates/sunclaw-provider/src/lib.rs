@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sunclaw_core::{AgentContext, CoreError, Decision, Message, ModelProvider};
+use sunclaw_core::{AgentContext, AgentRole, CoreError, Decision, Message, ModelProvider};
+
+pub mod openai;
+pub use openai::OpenAIProvider;
 
 #[derive(Debug, Clone)]
 pub struct ModelRoute {
@@ -43,9 +46,15 @@ impl MultiProvider {
     }
 
     fn choose_route<'a>(&'a self, ctx: &'a AgentContext) -> Result<&'a ModelRoute, CoreError> {
-        let route_name = ctx.model_profile.as_ref().unwrap_or(&self.default_route);
+        let route_name = if let Some(AgentRole::Planner) = ctx.role {
+            "reasoning"
+        } else {
+            ctx.model_profile.as_ref().unwrap_or(&self.default_route)
+        };
+
         self.routes
             .get(route_name)
+            .or_else(|| self.routes.get(&self.default_route))
             .ok_or_else(|| CoreError::Provider(format!("unknown model route: {route_name}")))
     }
 }
@@ -141,6 +150,7 @@ mod tests {
                     trace_id: "t".to_string(),
                     skill: None,
                     model_profile: Some("default".to_string()),
+                    role: None,
                 },
                 &[],
             )

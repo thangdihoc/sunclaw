@@ -6,7 +6,9 @@ license.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+dotenvy.workspace = true
 sunclaw-core = { path = "../sunclaw-core" }
 sunclaw-policy = { path = "../sunclaw-policy" }
 sunclaw-provider = { path = "../sunclaw-provider" }
 sunclaw-runtime = { path = "../sunclaw-runtime" }
+sunclaw-tools = { path = "../sunclaw-tools" }

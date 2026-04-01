@@ -7,10 +7,15 @@ use sunclaw_core::{
     Tool, ToolCall, ToolResult,
 };
 use sunclaw_policy::AllowlistPolicy;
-use sunclaw_provider::{ModelRoute, MultiProvider};
+use sunclaw_provider::{ModelRoute, MultiProvider, OpenAIProvider};
 use sunclaw_runtime::{Runtime, RuntimeOptions};
+use sunclaw_tools::WebSearchTool;
 
 pub fn build_runtime() -> Runtime {
+    let _ = dotenvy::dotenv();
+    let openrouter_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "secret".to_string());
+    let tavily_key = std::env::var("TAVILY_API_KEY").unwrap_or_else(|_| "secret".to_string());
+
     let mut provider = MultiProvider::new("default");
     provider.add_route(ModelRoute::new(
         "default",
@@ -36,15 +41,27 @@ pub fn build_runtime() -> Runtime {
 
     provider.add_backend(
         "openrouter:deepseek-v3",
-        Arc::new(MockBackend::new("openrouter:deepseek-v3")),
+        Arc::new(OpenAIProvider::new(
+            &openrouter_key,
+            "deepseek/deepseek-chat",
+            None,
+        )),
     );
     provider.add_backend(
         "xai:grok-3-mini",
-        Arc::new(MockBackend::new("xai:grok-3-mini")),
+        Arc::new(OpenAIProvider::new(
+            &openrouter_key,
+            "xai/grok-3-mini",
+            None,
+        )),
     );
     provider.add_backend(
         "openrouter:deepseek-r1",
-        Arc::new(MockBackend::new("openrouter:deepseek-r1")),
+        Arc::new(OpenAIProvider::new(
+            &openrouter_key,
+            "deepseek/deepseek-r1",
+            None,
+        )),
     );
     provider.add_backend(
         "google:gemini-2.5-pro",
@@ -56,7 +73,7 @@ pub fn build_runtime() -> Runtime {
     );
 
     let memory = Arc::new(InMemoryStore::default());
-    let policy = Arc::new(AllowlistPolicy::new(vec!["echo".into()]));
+    let policy = Arc::new(AllowlistPolicy::new(vec!["echo".into(), "web_search".into()]));
     let audit = Arc::new(InMemoryAuditStore::default());
 
     let mut runtime =
@@ -65,6 +82,7 @@ pub fn build_runtime() -> Runtime {
             max_tool_calls: 2,
         });
     runtime.register_tool(Arc::new(EchoTool));
+    runtime.register_tool(Arc::new(WebSearchTool::new(tavily_key)));
     runtime
 }
 

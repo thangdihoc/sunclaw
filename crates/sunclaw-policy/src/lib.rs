@@ -6,6 +6,7 @@ use sunclaw_core::{AgentContext, CoreError, PolicyEngine};
 pub struct AllowlistPolicy {
     global_allowed_tools: HashSet<String>,
     skill_allowed_tools: HashMap<String, HashSet<String>>,
+    forbidden_keywords: Vec<String>,
 }
 
 impl AllowlistPolicy {
@@ -13,7 +14,13 @@ impl AllowlistPolicy {
         Self {
             global_allowed_tools: allowed_tools.into_iter().collect(),
             skill_allowed_tools: HashMap::new(),
+            forbidden_keywords: vec!["rm ".into(), "delete ".into(), "format ".into()],
         }
+    }
+
+    pub fn with_forbidden_keywords(mut self, keywords: Vec<String>) -> Self {
+        self.forbidden_keywords = keywords;
+        self
     }
 
     pub fn with_skill_rules(mut self, skill: &str, allowed_tools: Vec<String>) -> Self {
@@ -25,7 +32,21 @@ impl AllowlistPolicy {
 
 #[async_trait]
 impl PolicyEngine for AllowlistPolicy {
-    async fn can_call_tool(&self, ctx: &AgentContext, tool_name: &str) -> Result<(), CoreError> {
+    async fn can_call_tool(
+        &self,
+        ctx: &AgentContext,
+        tool_name: &str,
+        tool_input: &str,
+    ) -> Result<(), CoreError> {
+        // Check for forbidden keywords in input
+        for kw in &self.forbidden_keywords {
+            if tool_input.contains(kw) {
+                return Err(CoreError::PolicyDenied(format!(
+                    "tool input contains forbidden keyword: {kw}"
+                )));
+            }
+        }
+
         if !self.global_allowed_tools.contains(tool_name) {
             return Err(CoreError::PolicyDenied(format!(
                 "tool not allowed by global policy: {tool_name}"
