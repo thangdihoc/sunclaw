@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tiktoken_rs::cl100k_base;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Role {
@@ -19,6 +19,16 @@ pub enum AgentRole {
 pub struct Message {
     pub role: Role,
     pub content: String,
+}
+
+impl Message {
+    pub fn estimate_tokens(&self) -> usize {
+        let bpe = cl100k_base().unwrap();
+        // Base tokens for every message (role, content formatting)
+        let mut tokens = 3; 
+        tokens += bpe.encode_with_special_tokens(&self.content).len();
+        tokens
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +54,7 @@ pub struct AgentContext {
     pub skill: Option<String>,
     pub model_profile: Option<String>,
     pub role: Option<AgentRole>,
+    pub max_tokens: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

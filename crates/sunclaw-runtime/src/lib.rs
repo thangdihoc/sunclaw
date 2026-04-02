@@ -11,6 +11,8 @@ use sunclaw_orchestrator::TeamFlow;
 pub struct RuntimeOptions {
     pub max_turns: usize,
     pub max_tool_calls: usize,
+    pub max_context_tokens: usize,
+    pub tool_timeout: std::time::Duration,
 }
 
 impl Default for RuntimeOptions {
@@ -18,6 +20,8 @@ impl Default for RuntimeOptions {
         Self {
             max_turns: 4,
             max_tool_calls: 2,
+            max_context_tokens: 4096,
+            tool_timeout: std::time::Duration::from_secs(30),
         }
     }
 }
@@ -36,6 +40,44 @@ pub struct Runtime {
     audit: Arc<dyn AuditStore>,
     tools: HashMap<String, Arc<dyn Tool>>,
     options: RuntimeOptions,
+}
+
+pub struct ContextManager;
+
+impl ContextManager {
+    pub fn prune(messages: &[Message], max_tokens: usize) -> Vec<Message> {
+        let mut system_msgs = Vec::new();
+        let mut other_msgs = Vec::new();
+
+        for msg in messages {
+            if msg.role == Role::System {
+                system_msgs.push(msg.clone());
+            } else {
+                other_msgs.push(msg.clone());
+            }
+        }
+
+        let mut current_tokens = system_msgs.iter().map(|m| m.estimate_tokens()).sum::<usize>();
+        let mut final_other_msgs = Vec::new();
+
+        // Add non-system messages starting from the most recent
+        for msg in other_msgs.into_iter().rev() {
+            let msg_tokens = msg.estimate_tokens();
+            if current_tokens + msg_tokens <= max_tokens {
+                current_tokens += msg_tokens;
+                final_other_msgs.push(msg);
+            } else {
+                break;
+            }
+        }
+        
+        // Reverse back to chronological order
+        final_other_msgs.reverse();
+
+        let mut result = system_msgs;
+        result.extend(final_other_msgs);
+        result
+    }
 }
 
 impl Runtime {
@@ -117,8 +159,18 @@ impl Runtime {
 
         while turns < self.options.max_turns {
             turns += 1;
-            let messages = self.memory.load_messages(&ctx.trace_id).await?;
-            match self.provider.decide(ctx, &messages).await? {
+            let all_messages = self.memory.load_messages(&ctx.trace_id).await?;
+            
+            // Context Management: Limit tokens
+            let limit = ctx.max_tokens.unwrap_or(self.options.max_context_tokens);
+            let pruned_messages = ContextManager::prune(&all_messages, limit);
+            
+            if pruned_messages.len() < all_messages.len() {
+                println!("! [Runtime] Context pruned from {} to {} messages due to token limit ({})", 
+                    all_messages.len(), pruned_messages.len(), limit);
+            }
+
+            match self.provider.decide(ctx, &pruned_messages).await? {
                 Decision::Reply(text) => {
                     self.memory
                         .append_message(
@@ -169,7 +221,18 @@ impl Runtime {
                         .tools
                         .get(&call.name)
                         .ok_or_else(|| CoreError::Tool(format!("unknown tool: {}", call.name)))?;
-                    let result = tool.run(&call.input).await?;
+                    
+                    // Execute tool with timeout
+                    let result = match tokio::time::timeout(self.options.tool_timeout, tool.run(&call.input)).await {
+                        Ok(res) => res?,
+                        Err(_) => {
+                            return Err(CoreError::Tool(format!(
+                                "tool execution timed out after {:?}",
+                                self.options.tool_timeout
+                            )))
+                        }
+                    };
+
                     self.memory
                         .append_message(
                             &ctx.trace_id,
@@ -314,6 +377,8 @@ mod tests {
             Runtime::new(provider, memory, policy, audit).with_options(RuntimeOptions {
                 max_turns: 3,
                 max_tool_calls: 1,
+                max_context_tokens: 1000,
+                tool_timeout: std::time::Duration::from_secs(5),
             });
         runtime.register_tool(Arc::new(EchoTool));
 
@@ -323,6 +388,8 @@ mod tests {
                     trace_id: "t-1".to_string(),
                     skill: Some("general".to_string()),
                     model_profile: Some("default".to_string()),
+                    role: None,
+                    max_tokens: None,
                 },
                 "hello",
             )

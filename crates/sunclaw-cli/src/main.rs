@@ -4,7 +4,7 @@ use sunclaw_core::AgentContext;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let runtime = build_runtime();
+    let runtime = build_runtime().await;
 
     let args = std::env::args().skip(1).collect::<Vec<String>>();
     let mut model_profile = "default".to_string();

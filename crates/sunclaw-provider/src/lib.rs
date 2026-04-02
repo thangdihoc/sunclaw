@@ -7,6 +7,44 @@ use sunclaw_core::{AgentContext, AgentRole, CoreError, Decision, Message, ModelP
 pub mod openai;
 pub use openai::OpenAIProvider;
 
+#[derive(Clone)]
+pub struct RetryProvider {
+    inner: Arc<dyn ModelProvider>,
+    max_retries: usize,
+}
+
+impl RetryProvider {
+    pub fn new(inner: Arc<dyn ModelProvider>, max_retries: usize) -> Self {
+        Self { inner, max_retries }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for RetryProvider {
+    async fn decide(
+        &self,
+        ctx: &AgentContext,
+        messages: &[Message],
+    ) -> Result<Decision, CoreError> {
+        let mut last_err = None;
+
+        for attempt in 0..=self.max_retries {
+            match self.inner.decide(ctx, messages).await {
+                Ok(decision) => return Ok(decision),
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt < self.max_retries {
+                        // Exponential backoff or simple delay can be added here
+                        tokio::time::sleep(std::time::Duration::from_millis(500 * (attempt as u64 + 1))).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| CoreError::Provider("Retries failed".to_string())))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelRoute {
     pub name: String,

@@ -1,47 +1,58 @@
-# Sunclaw AI Runtime - Hướng dẫn sử dụng nhanh
+# Sunclaw v0.1 Quickstart
 
-Chào mừng bạn đến với **Sunclaw**, framework AI Agent mạnh mẽ được xây dựng bằng Rust.
+Chào mừng bạn đến với **Sunclaw v0.1**. Đây là nền tảng AI Agent hiệu năng cao được xây dựng bằng Rust.
 
 ## 🚀 Cài đặt nhanh
 
-1. **Cấu hình môi trường:**
-   Sao chép tệp `.env.example` thành `.env` và điền các API Key của bạn:
-   ```bash
-   cp .env.example .env
-   ```
-   Các biến quan trọng:
-   - `OPENROUTER_API_KEY`: Dùng để kết nối với các mô hình như DeepSeek, Grok.
-   - `TAVILY_API_KEY`: Dùng cho công cụ tìm kiếm web.
-
-2. **Build dự án:**
-   ```bash
-   cargo build --workspace
-   ```
-
-## 🛠️ Cách sử dụng
-
-### 1. Chế độ Agent đơn lẻ (Single Agent)
-Chạy một câu hỏi đơn giản:
-```bash
-cargo run --package sunclaw-cli -- "Hỏi gì đó ở đây"
+### 1. Cấu hình môi trường
+Tạo tệp `.env` tại thư mục gốc:
+```env
+OPENROUTER_API_KEY=your_openrouter_key
+TAVILY_API_KEY=your_tavily_key
+SUNCLAW_API_KEY=my_secret_key
 ```
 
-### 2. Chế độ Làm việc nhóm (Team Mode)
-Kích hoạt luồng phối hợp **Planner -> Executor -> Reviewer**:
+### 2. Chạy ứng dụng CLI
+Sử dụng CLI để tương tác trực tiếp:
 ```bash
-cargo run --package sunclaw-cli -- --team "Lập kế hoạch và thực hiện tìm kiếm về Rust 2024"
+cargo run -- "Lập kế hoạch du lịch Đà Lạt 3 ngày 2 đêm"
 ```
 
-### 3. Chọn model profile
-Sử dụng các profile đã cấu hình sẵn (`default`, `reasoning`, `cheap`):
+### 3. Chạy API Server
+Khởi động máy chủ REST API:
 ```bash
-cargo run --package sunclaw-cli -- --profile reasoning "Giải bài toán khó này..."
+cargo run -p sunclaw-server
 ```
-
-## 🛡️ Tính năng bảo mật
-Hệ thống đã tích hợp sẵn:
-- **Allowlist:** Chỉ cho phép các công cụ đã đăng ký.
-- **Input Checking:** Tự động chặn các lệnh nguy hiểm (ví dụ: `rm`, `delete`).
+Server sẽ chạy tại: `http://localhost:8080`
 
 ---
-Dự án được phát triển bởi Sunclaw Team. Chúc bạn có những trải nghiệm tuyệt vời!
+
+## 📡 Các API chính
+
+### 1. Kiểm tra trạng thái
+```bash
+curl http://localhost:8080/api/v1/health \
+  -H "Authorization: Bearer my_secret_key"
+```
+
+### 2. Gửi lệnh chat
+```bash
+curl -X POST http://localhost:8080/api/v1/chat \
+  -H "Authorization: Bearer my_secret_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Kiểm tra giá Bitcoin hiện tại bằng công cụ tìm kiếm",
+    "model_profile": "reasoning"
+  }'
+```
+
+---
+
+## 🛡️ Tính năng nổi bật đã tích hợp
+- **Persistence:** Lưu lịch sử vào SQLite (`sunclaw.db`).
+- **Reliability:** Tự động retry khi API lỗi.
+- **Security:** Sandbox cơ bản cho Tool và giới hạn Timeout.
+- **Context Management:** Tự động cắt tỉa tin nhắn khi vượt giới hạn Token.
+
+---
+*Ghi chú: Bản v0.1 MVP tập trung vào sự ổn định và hiệu năng hạt nhân.*

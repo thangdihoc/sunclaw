@@ -1,0 +1,13 @@
+[package]
+name = "sunclaw-memory-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+sqlx = { workspace = true }
+sunclaw-core = { path = "../sunclaw-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

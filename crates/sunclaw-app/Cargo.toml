@@ -12,3 +12,4 @@ sunclaw-policy = { path = "../sunclaw-policy" }
 sunclaw-provider = { path = "../sunclaw-provider" }
 sunclaw-runtime = { path = "../sunclaw-runtime" }
 sunclaw-tools = { path = "../sunclaw-tools" }
+sunclaw-memory-sqlite = { path = "../sunclaw-memory-sqlite" }
