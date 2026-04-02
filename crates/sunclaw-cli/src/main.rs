@@ -1,63 +1,119 @@
 use anyhow::Result;
-use sunclaw_app::build_runtime;
+use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
+use std::sync::Arc;
+use sunclaw_app::{build_runtime, RuntimeConfig};
 use sunclaw_core::AgentContext;
+use sunclaw_telegram::TelegramBridge;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let runtime = build_runtime().await;
+    println!("=== 🦀 Sunclaw v0.1: AI Agent Setup ===");
 
-    let args = std::env::args().skip(1).collect::<Vec<String>>();
-    let mut model_profile = "default".to_string();
-    let mut input = "hello sunclaw".to_string();
-    let mut is_team = false;
+    let theme = ColorfulTheme::default();
 
-    let mut i = 0;
-    while i < args.len() {
-        let arg = &args[i];
-        if arg == "--profile" {
-            if i + 1 < args.len() {
-                model_profile = args[i + 1].clone();
-                i += 2;
-                continue;
-            }
-        } else if arg == "--team" {
-            is_team = true;
-            i += 1;
-            continue;
-        }
-        input = arg.clone();
-        break;
-    }
+    // 1. Chọn Nhà cung cấp AI
+    let providers = &["OpenRouter", "OpenAI", "Anthropic", "Google Gemini"];
+    let provider_idx = Select::with_theme(&theme)
+        .with_prompt("Chọn nhà cung cấp AI")
+        .items(providers)
+        .default(0)
+        .interact()?;
+    
+    let provider_name = providers[provider_idx].to_lowercase().replace(" ", "");
 
-    let ctx = AgentContext {
-        trace_id: "demo-trace".to_string(),
-        skill: Some("general".to_string()),
-        model_profile: Some(model_profile.clone()),
-        role: None,
+    // 2. Nhập API Key cho Provider đã chọn
+    let api_key: String = Password::with_theme(&theme)
+        .with_prompt(format!("Nhập API Key cho {}", providers[provider_idx]))
+        .interact()?;
+
+    // 3. Chọn Model dựa trên Provider
+    let models = match provider_name.as_str() {
+        "openrouter" => vec!["deepseek/deepseek-chat", "anthropic/claude-3.5-sonnet", "google/gemini-pro-1.5", "meta-llama/llama-3.1-405b"],
+        "openai" => vec!["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "anthropic" => vec!["claude-3-5-sonnet-20240620", "claude-3-opus-20240229"],
+        "googlegemini" => vec!["gemini-1.5-pro", "gemini-1.5-flash"],
+        _ => vec!["default"],
     };
 
-    if is_team {
-        use sunclaw_orchestrator::TeamFlow;
-        let flow = TeamFlow::planner_executor_reviewer();
-        let outcomes = runtime.run_team_flow(&ctx, &input, &flow).await?;
-        for (idx, outcome) in outcomes.iter().enumerate() {
-            let role_name = match idx {
-                0 => "Planner",
-                1 => "Executor",
-                2 => "Reviewer",
-                _ => "Agent",
-            };
-            println!(
-                "\n--- [{role_name}] ---\n{}\n(turns={}, tool_calls={})",
-                outcome.output, outcome.turns, outcome.tool_calls
-            );
+    let model_idx = Select::with_theme(&theme)
+        .with_prompt("Chọn Model AI")
+        .items(&models)
+        .default(0)
+        .interact()?;
+    
+    let model_id = models[model_idx].to_string();
+
+    // 4. Nhập Tavily Key
+    let tavily_key: String = Password::with_theme(&theme)
+        .with_prompt("Nhập Tavily API Key (Tìm kiếm Web - để trống nếu không dùng)")
+        .allow_empty_password(true)
+        .interact()?;
+
+    let config = RuntimeConfig {
+        provider: provider_name,
+        model_id,
+        api_key,
+        tavily_key: if tavily_key.is_empty() { None } else { Some(tavily_key) },
+    };
+
+    let runtime = Arc::new(build_runtime(Some(config)).await);
+
+    // 2. Select Run Mode
+    let modes = &["Chat trên Terminal", "Chạy Telegram Bot"];
+    let selection = Select::with_theme(&theme)
+        .with_prompt("Chọn chế độ hoạt động")
+        .items(modes)
+        .default(0)
+        .interact()?;
+
+    match selection {
+        0 => {
+            // Terminal Chat Mode
+            println!("\n--- Đang bắt đầu Terminal Chat (Gõ 'quit' để thoát) ---");
+            loop {
+                let input: String = Input::with_theme(&theme)
+                    .with_prompt("Bạn")
+                    .interact_text()?;
+
+                if input == "quit" || input == "exit" {
+                    break;
+                }
+
+                let ctx = AgentContext {
+                    trace_id: "cli-chat".to_string(),
+                    skill: None,
+                    model_profile: Some("default".to_string()),
+                    role: None,
+                    max_tokens: None,
+                };
+
+                match runtime.run_once(&ctx, &input).await {
+                    Ok(outcome) => {
+                        println!("\n[AI]: {}\n(turns={}, tools={})\n", outcome.output, outcome.turns, outcome.tool_calls);
+                    }
+                    Err(e) => {
+                        println!("\n[Error]: {:?}\n", e);
+                    }
+                }
+            }
         }
-    } else {
-        let outcome = runtime.run_once(&ctx, &input).await?;
-        println!(
-            "profile={}\n{}\n(turns={}, tool_calls={})",
-            model_profile, outcome.output, outcome.turns, outcome.tool_calls
-        );
+        1 => {
+            // Telegram Bot Mode
+            let token: String = Password::with_theme(&theme)
+                .with_prompt("Nhập Telegram Bot Token")
+                .interact()?;
+
+            let chat_id_str: String = Input::with_theme(&theme)
+                .with_prompt("Nhập Authorized Chat ID (ID của bạn)")
+                .interact_text()?;
+
+            let chat_id: i64 = chat_id_str.parse().expect("Chat ID phải là một con số!");
+
+            let bridge = TelegramBridge::new(runtime, chat_id);
+            bridge.run(token).await?;
+        }
+        _ => unreachable!(),
     }
+
     Ok(())
 }

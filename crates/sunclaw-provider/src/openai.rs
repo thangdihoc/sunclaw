@@ -97,13 +97,14 @@ impl ModelProvider for OpenAIProvider {
             .map_err(|e| CoreError::Provider(format!("HTTP error: {e}")))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CoreError::Provider(format!(
                 "API error ({}): {}",
-                response.status(),
+                status,
                 error_text
             )));
         }

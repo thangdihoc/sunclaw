@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let api_key = std::env::var("SUNCLAW_API_KEY").unwrap_or_else(|_| "sunclaw_default_secret".to_string());
-    let runtime = Arc::new(build_runtime().await);
+    let runtime = Arc::new(build_runtime(None).await);
     
     let state = AppState {
         runtime,

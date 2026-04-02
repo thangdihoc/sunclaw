@@ -9,3 +9,6 @@ anyhow.workspace = true
 tokio.workspace = true
 sunclaw-app = { path = "../sunclaw-app" }
 sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-telegram = { path = "../sunclaw-telegram" }
+sunclaw-orchestrator = { path = "../sunclaw-orchestrator" }
+dialoguer.workspace = true

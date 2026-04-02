@@ -1,22 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sunclaw_core::AgentRole;
 
-impl AgentRole {
-    pub fn get_system_instructions(&self) -> String {
-        match self {
-            AgentRole::Planner => {
-                "Bạn là Người Lập Kế Hoạch (Planner). Nhiệm vụ của bạn là chia nhỏ yêu cầu của người dùng thành các bước thực hiện cụ thể. Đừng tự thực hiện, chỉ lập kế hoạch.".to_string()
-            }
-            AgentRole::Executor => {
-                "Bạn là Người Thực Thi (Executor). Hãy thực hiện các bước trong kế hoạch bằng cách sử dụng các công cụ được cho phép. Tập trung vào độ chính xác của kết quả.".to_string()
-            }
-            AgentRole::Reviewer => {
-                "Bạn là Người Đánh Giá (Reviewer). Hãy kiểm tra kết quả từ Người Thực Thi đối chiếu với kế hoạch ban đầu. Đảm bảo mọi thứ đều đúng yêu cầu và an toàn.".to_string()
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HandoffStep {
     pub role: AgentRole,

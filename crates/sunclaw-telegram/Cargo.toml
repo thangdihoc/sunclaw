@@ -1,0 +1,15 @@
+[package]
+name = "sunclaw-telegram"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-runtime = { path = "../sunclaw-runtime" }
+teloxide.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing = "0.1"
+async-trait.workspace = true

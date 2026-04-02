@@ -12,10 +12,26 @@ use sunclaw_runtime::{Runtime, RuntimeOptions};
 use sunclaw_tools::WebSearchTool;
 use sunclaw_memory_sqlite::SqliteStore;
 
-pub async fn build_runtime() -> Runtime {
+pub struct RuntimeConfig {
+    pub provider: String, // "openrouter", "openai", "anthropic", "google"
+    pub model_id: String,
+    pub api_key: String,
+    pub tavily_key: Option<String>,
+}
+
+pub async fn build_runtime(config: Option<RuntimeConfig>) -> Runtime {
     let _ = dotenvy::dotenv();
-    let openrouter_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "secret".to_string());
-    let tavily_key = std::env::var("TAVILY_API_KEY").unwrap_or_else(|_| "secret".to_string());
+    
+    let (provider_name, model_id, api_key, tavily_key) = if let Some(c) = config {
+        (c.provider, c.model_id, c.api_key, c.tavily_key.unwrap_or_else(|| "secret".to_string()))
+    } else {
+        (
+            "openrouter".to_string(),
+            "deepseek/deepseek-chat".to_string(),
+            std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "secret".to_string()),
+            std::env::var("TAVILY_API_KEY").unwrap_or_else(|_| "secret".to_string()),
+        )
+    };
 
     let sqlite_store = Arc::new(
         SqliteStore::new("sqlite:sunclaw.db?mode=rwc")
@@ -24,57 +40,25 @@ pub async fn build_runtime() -> Runtime {
     );
 
     let mut router = MultiProvider::new("default");
-    provider.add_route(ModelRoute::new(
+    router.add_route(ModelRoute::new(
         "default",
-        vec![
-            "openrouter:deepseek-v3".to_string(),
-            "xai:grok-3-mini".to_string(),
-        ],
-    ));
-    provider.add_route(ModelRoute::new(
-        "reasoning",
-        vec![
-            "openrouter:deepseek-r1".to_string(),
-            "google:gemini-2.5-pro".to_string(),
-        ],
-    ));
-    provider.add_route(ModelRoute::new(
-        "cheap",
-        vec![
-            "google:gemini-2.5-flash".to_string(),
-            "openrouter:deepseek-v3".to_string(),
-        ],
+        vec![model_id.clone()],
     ));
 
+    let endpoint = match provider_name.as_str() {
+        "openai" => Some("https://api.openai.com/v1".to_string()),
+        "anthropic" => Some("https://api.anthropic.com/v1".to_string()), // Will need AnthropicProvider later
+        "google" => Some("https://generativelanguage.googleapis.com/v1beta".to_string()),
+        _ => Some("https://openrouter.ai/api/v1".to_string()),
+    };
+
     router.add_backend(
-        "openrouter:deepseek-v3",
+        &model_id,
         Arc::new(RetryProvider::new(
             Arc::new(OpenAIProvider::new(
-                &openrouter_key,
-                "deepseek/deepseek-chat",
-                None,
-            )),
-            3, // Max retries
-        )),
-    );
-    router.add_backend(
-        "xai:grok-3-mini",
-        Arc::new(RetryProvider::new(
-            Arc::new(OpenAIProvider::new(
-                &openrouter_key,
-                "xai/grok-3-mini",
-                None,
-            )),
-            3,
-        )),
-    );
-    router.add_backend(
-        "openrouter:deepseek-r1",
-        Arc::new(RetryProvider::new(
-            Arc::new(OpenAIProvider::new(
-                &openrouter_key,
-                "deepseek/deepseek-r1",
-                None,
+                &api_key,
+                &model_id,
+                endpoint,
             )),
             3,
         )),
@@ -88,6 +72,8 @@ pub async fn build_runtime() -> Runtime {
         Runtime::new(Arc::new(router), memory, policy, audit).with_options(RuntimeOptions {
             max_turns: 4,
             max_tool_calls: 2,
+            max_context_tokens: 4096,
+            tool_timeout: std::time::Duration::from_secs(30),
         });
     runtime.register_tool(Arc::new(EchoTool));
     runtime.register_tool(Arc::new(WebSearchTool::new(tavily_key)));
