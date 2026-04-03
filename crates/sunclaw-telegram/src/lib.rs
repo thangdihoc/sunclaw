@@ -2,7 +2,7 @@ use std::sync::Arc;
 use teloxide::prelude::*;
 use async_trait::async_trait;
 use sunclaw_core::{Bridge, CoreError, AgentContext};
-use sunclaw_app::build_runtime;
+// use sunclaw_app::build_runtime;
 use sunclaw_runtime::Runtime;
 
 pub struct TelegramBridge {

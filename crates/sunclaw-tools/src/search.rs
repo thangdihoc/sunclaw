@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use sunclaw_core::{sunclaw_tool, CoreError, Tool, ToolResult};
+use sunclaw_core::{sunclaw_tool, CoreError, ToolResult};
 use schemars::JsonSchema;
 
 pub struct WebSearchTool {

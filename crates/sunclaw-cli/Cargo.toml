@@ -12,3 +12,7 @@ sunclaw-core = { path = "../sunclaw-core" }
 sunclaw-telegram = { path = "../sunclaw-telegram" }
 sunclaw-orchestrator = { path = "../sunclaw-orchestrator" }
 dialoguer.workspace = true
+colored.workspace = true
+clap.workspace = true
+sysinfo.workspace = true
+dotenvy.workspace = true
