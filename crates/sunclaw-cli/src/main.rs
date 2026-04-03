@@ -84,14 +84,16 @@ fn save_config(config: &Config) -> Result<()> {
 
 fn show_header() {
     let art = r#"
- ██████  ██    ██ ███    ██  ██████ ██       █████  ██     ██ 
-██       ██    ██ ████   ██ ██      ██      ██   ██ ██     ██ 
- ██████  ██    ██ ██ ██  ██ ██      ██      ███████ ██  █  ██ 
-      ██ ██    ██ ██  ██ ██ ██      ██      ██   ██ ██ ███ ██ 
- ██████   ██████  ██   ████  ██████ ███████ ██   ██  ███ ███  
+   _____ _    _ _   _  _____ _          __          __
+  / ____| |  | | \ | |/ ____| |         \ \        / /
+ | (___ | |  | |  \| | |    | |   __ _   \ \  /\  / / 
+  \___ \| |  | | . ` | |    | |  / _` |   \ \/  \/ /  
+  ____) | |__| | |\  | |____| | | (_| |    \  /\  /   
+ |_____/ \____/|_| \_|\_____|_|  \__,_|     \/  \/    
     "#;
-    println!("{}", art.cyan().bold());
-    println!("{}", "--- Hệ thống AI Agent Hiệu năng cao (Rust) ---".yellow());
+    println!("{}", art.bright_yellow().bold());
+    println!("{}", "   >>> AI Agent Hiệu năng cao cho kỷ nguyên mới <<<".bright_cyan());
+    println!("{}", "       -----------------------------------------".bright_black());
     println!();
 }
 
@@ -100,61 +102,79 @@ fn show_system_info() {
     sys.refresh_all();
 
     println!("{}", "╔════════════════════════════════════════════════════════════╗".bright_black());
-    println!("║ {:^58} ║", "THÔNG TIN HỆ THỐNG".bold().bright_white());
+    println!("║ {:^58} ║", "📊 TRẠNG THÁI HỆ THỐNG".bold().bright_white());
     println!("{}", "╠════════════════════════════════════════════════════════════╣".bright_black());
     
     let cpu_brand = sys.cpus().get(0).map(|c| c.brand()).unwrap_or("Unknown");
-    println!("║ {}: {:<48} ║", "CPU".green(), cpu_brand.trim());
+    println!("║ {}: {:<48} ║", "💻 CPU".green(), cpu_brand.trim());
     
     let total_mem = sys.total_memory() / 1024 / 1024 / 1024;
-    println!("║ {}: {:<48} ║", "RAM".green(), format!("{} GB", total_mem));
+    println!("║ {}: {:<48} ║", "🧠 RAM".green(), format!("{} GB", total_mem));
     
     let os = System::long_os_version().unwrap_or_else(|| "Unknown".to_string());
-    println!("║ {}: {:<49} ║", "OS".green(), os);
+    println!("║ {}: {:<49} ║", "🛡️  OS ".green(), os);
     
     println!("{}", "╚════════════════════════════════════════════════════════════╝".bright_black());
     println!();
 }
 
 async fn run_onboard(theme: &ColorfulTheme) -> Result<()> {
-    println!("{}", ">>> PHẦN THIẾT LẬP CẤU HÌNH (ONBOARDING) <<<".bright_magenta().bold());
+    println!("{}", "✨ CHÀO MỪNG BẠN ĐẾN VỚI SUNCLAW ✨".bright_white().on_bright_magenta().bold());
+    println!("{}", "Hãy cùng thiết lập môi trường làm việc của bạn trong nháy mắt.\n".bright_black());
 
     // 1. Chọn Nhà cung cấp AI
-    let providers = &["OpenRouter", "OpenAI", "Anthropic", "Google Gemini"];
+    let providers = &["OpenRouter (Khuyên dùng)", "OpenAI", "Anthropic (Claude)", "Google Gemini"];
     let provider_idx = Select::with_theme(theme)
-        .with_prompt("Chọn nhà cung cấp AI mặc định")
+        .with_prompt("🎯 Chọn bộ não (AI Provider) cho Agent của bạn")
         .items(providers)
         .default(0)
         .interact()?;
     
-    let provider_name = providers[provider_idx].to_lowercase().replace(" ", "");
+    let provider_name = match provider_idx {
+        0 => "openrouter",
+        1 => "openai",
+        2 => "anthropic",
+        3 => "googlegemini",
+        _ => "openrouter",
+    };
 
-    // 2. Nhập API Key cho Provider
+    // 2. Nhập API Key
+    println!("\n{}", format!("🔑 Thiết lập API Key cho {}:", providers[provider_idx]).bold());
     let api_key: String = Password::with_theme(theme)
-        .with_prompt(format!("Nhập API Key cho {}", providers[provider_idx]))
+        .with_prompt("Nhập API Key của bạn (Sẽ được ẩn đi)")
         .interact()?;
 
-    // 3. Nhập Tavily Key
+    if api_key.is_empty() {
+        println!("{}", "❌ API Key không được để trống!".red());
+        return Ok(());
+    }
+
+    // 3. Nhập Tavily Key cho Web Search
+    println!("\n{}", "🌐 Khả năng truy cập Internet (Tùy chọn):".bold());
     let tavily_key: String = Password::with_theme(theme)
-        .with_prompt("Nhập Tavily API Key (Dùng cho Web Search, để trống nếu không dùng)")
+        .with_prompt("Nhập Tavily API Key (Dùng cho Web Search, nhấn Enter để bỏ qua)")
         .allow_empty_password(true)
         .interact()?;
 
-    // 4. Nhập Telegram Token
+    // 4. Nhập Telegram Token cho Bot
+    println!("\n{}", "🤖 Kết nối Telegram Bot (Tùy chọn):".bold());
     let tele_token: String = Password::with_theme(theme)
-        .with_prompt("Nhập Telegram Bot Token (Để trống nếu không dùng)")
+        .with_prompt("Nhập Telegram Bot Token (Nhấn Enter để bỏ qua)")
         .allow_empty_password(true)
         .interact()?;
 
     let config = Config {
-        provider: provider_name,
+        provider: provider_name.to_string(),
         api_key,
         tavily_key: if tavily_key.is_empty() { None } else { Some(tavily_key) },
         tele_token: if tele_token.is_empty() { None } else { Some(tele_token) },
     };
 
     save_config(&config)?;
-    println!("\n{}", format!("✅ Đã lưu cấu hình vào: {:?}", get_config_path()).green().bold());
+    
+    println!("\n{}", "🚀 CẤU HÌNH HOÀN TẤT!".bright_green().bold());
+    println!("{}", format!("📁 Đã lưu tại: {:?}", get_config_path()).bright_black());
+    println!("{}", "Giờ đây bạn có thể chạy lệnh 'sunclaw chat' để bắt đầu!".bright_yellow());
     
     Ok(())
 }

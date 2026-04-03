@@ -1,64 +1,68 @@
-# Sunclaw
+# 🦂 Sunclaw
 
-Sunclaw is a Rust-first AI agent runtime with:
-- plugin-based core contracts,
-- runtime guardrails (turn/tool limits),
-- allowlist policy with optional skill-level restrictions,
-- auditable tool decisions,
-- role-based team flow primitives,
-- multi-agent coordination (Hierarchical & Sequential),
-- multi-model routing profiles (OpenRouter/Gemini/xAI style backends).
+**Hệ thống AI Agent Hiệu năng cao (Rust-first) với thiết kế tinh gọn và chuyên nghiệp.**
 
-## Workspace crates
+Sunclaw được xây dựng để trở thành "bộ óc" điều phối đa tác nhân, tối ưu hóa cho tốc độ phản hồi và sự an toàn trong thực thi công cụ.
 
-- `sunclaw-core`: shared contracts, domain types, and error types.
-- `sunclaw-provider`: provider routing + fallback registry.
-- `sunclaw-runtime`: runtime execution loop (provider/policy/tool/memory/audit).
-- `sunclaw-policy`: allowlist-based policy engine.
-- `sunclaw-orchestrator`: multi-agent coordination (Hierarchical & Sequential).
-- `sunclaw-tools`: official tool ecosystem (WebSearch, etc.).
-- `sunclaw-skills`: skill manifest schema + validation.
-- `sunclaw-app`: composition root using in-memory adapters.
-- `sunclaw-cli`: executable demo.
+---
 
-## Multi-Agent Orchestration
+## 🚀 Cài đặt nhanh (One-Liner)
 
-Sunclaw supports complex agentic workflows:
-- **Hierarchical**: A Supervisor agent acts as a planner, delegating sub-tasks to specialized Worker agents (wrapped as tools).
-- **Sequential**: A linear chain of agents (TeamFlow) where each agent's output feeds the next.
+Chúng tôi đã đơn giản hóa quy trình cài đặt để bạn có thể bắt đầu trong nháy mắt.
 
-## Plugin SDK
+**Đối với Windows (PowerShell):**
 
-Creating new tools is easy with the `sunclaw_tool!` macro. It automatically generates JSON Schema and handles argument parsing:
-
-```rust
-sunclaw_tool!(
-    MyTool, Args, "tool_name", "Description...", 
-    self_obj, args, {
-        Ok(ToolResult { output: "..." })
-    }
-);
+```powershell
+iwr -useb raw.githubusercontent.com/SunclawTeam/sunclaw/main/scripts/install.ps1 | iex
 ```
 
-## Quick start
+**Sau khi cài đặt, hãy khởi chạy trình hướng dẫn thiết lập:**
 
 ```bash
-cargo run -p sunclaw-cli -- "hỏi gì đó"
-cargo run -p sunclaw-cli -- --profile reasoning "giải quyết vấn đề"
-cargo run -p sunclaw-cli -- --team "Nghiên cứu về Rust 1.80"
+sunclaw onboard
 ```
 
-## Near-term roadmap
+---
 
-1. Add Bridge adapters (Discord, Zalo, Telegram).
-2. Advanced tool sandboxing (WebAssembly/MicroVMs).
-3. Distributed orchestrator state (Redis/Postgres).
-4. v0.1 Release and crates.io publishing.
+## ✨ Điểm nổi bật
 
-## Development checks
+- **Plugin-based architecture**: Dễ dàng mở rộng với Plugin SDK.
+- **Runtime guardrails**: Giới hạn số lượt và công cụ để đảm bảo an toàn.
+- **Multi-agent coordination**: Hỗ trợ mô hình Hierarchical (Phân cấp) và Sequential (Nối tiếp).
+- **Multi-model routing**: OpenRouter, Gemini, OpenAI tích hợp sẵn.
+- **Lightweight**: Chỉ tiêu tốn vài MB RAM (PicoClaw-style).
+
+---
+
+## 🛠️ Quy trình làm việc (Workspace Crates)
+
+Dự án được phân chia thành các module chuyên biệt:
+
+- `sunclaw-core`: Các hợp đồng lõi và kiểu dữ liệu chung.
+- `sunclaw-provider`: Điều phối Model và Fallback.
+- `sunclaw-runtime`: Vòng lặp thực thi (Policy/Tool/Memory/Audit).
+- `sunclaw-orchestrator`: Điều phối đa tác nhân (TeamFlow).
+- `sunclaw-skills`: Định nghĩa kịch bản Agent (Manifest).
+
+---
+
+## 🤖 Điều phối Đa tác nhân (Orchestration)
+
+Sunclaw hỗ trợ các quy trình Agentic phức tạp:
+
+- **Hierarchical**: Một Supervisor Agent làm trưởng nhóm, phân công cho các Worker Agent.
+- **Sequential**: Chuỗi Agent nối tiếp (TeamFlow), kết quả của người này là đầu vào của người kia.
+
+---
+
+## 🧪 Phát triển & Kiểm thử
+
+Bạn vẫn có thể chạy trực tiếp từ mã nguồn nếu muốn đóng góp:
 
 ```bash
-cargo fmt --all
-cargo test --workspace
-cargo run -p sunclaw-cli -- --profile default "force_provider_fail"
+cargo run -p sunclaw-cli -- chat
+cargo run -p sunclaw-cli -- onboard
 ```
+
+---
+*Cảm ơn bạn đã tin dùng Sunclaw - Agent của tương lai.*

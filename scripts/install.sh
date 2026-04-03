@@ -34,12 +34,12 @@ echo "🚀 Đang tải Sunclaw ($VERSION) cho $OS $ARCH..."
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR"
 
-# Giả lập việc tải về (Thực tế sẽ dùng curl)
-# curl -L "$DOWNLOAD_URL" -o sunclaw.tar.gz
-# tar -xzf sunclaw.tar.gz
+# Tải Binary từ GitHub Releases
+curl -L "$DOWNLOAD_URL" -o sunclaw.tar.gz
+tar -xzf sunclaw.tar.gz
 
-echo "📦 Đang giải nén và cài đặt..."
-# sudo mv "$BINARY_NAME" "$INSTALL_DIR/"
-# sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
+echo "📦 Đang giải nén và cài đặt vào $INSTALL_DIR..."
+sudo mv "$BINARY_NAME" "$INSTALL_DIR/"
+sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
-echo "✅ Đã cài đặt xong! Hãy chạy 'sunclaw --setup' để bắt đầu."
+echo "✅ Đã cài đặt xong! Hãy chạy 'sunclaw onboard' để bắt đầu."
