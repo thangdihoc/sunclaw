@@ -10,68 +10,83 @@ function Write-Host-Color($msg, $color) {
 Write-Host-Color "Chào mừng bạn đến với Sunclaw - AI Agent Hiệu năng cao 🦀" "Cyan"
 Write-Host-Color "--------------------------------------------------------" "Gray"
 
-# 1. Kiểm tra yêu cầu hệ thống
-Write-Host-Color "Đang kiểm tra môi trường..." "Cyan"
-
-if (!(Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host-Color "Lỗi: Chưa cài đặt Git. Vui lòng cài đặt Git từ https://git-scm.com/" "Red"
-    exit 1
-}
-
-if (!(Get-Command cargo -ErrorAction SilentlyContinue)) {
-    Write-Host-Color "Lỗi: Chưa cài đặt Rust. Vui lòng cài đặt từ https://rustup.rs/" "Red"
-    exit 1
-}
-
-# 2. Cấu hình thư mục
+# 1. Cấu hình thư mục
 $SUNCLAW_HOME = Join-Path $HOME ".sunclaw"
 $SUNCLAW_BIN = Join-Path $SUNCLAW_HOME "bin"
 $SUNCLAW_SRC = Join-Path $SUNCLAW_HOME "src"
 
 if (!(Test-Path $SUNCLAW_BIN)) { New-Item -ItemType Directory -Path $SUNCLAW_BIN -Force | Out-Null }
-if (!(Test-Path $SUNCLAW_SRC)) { New-Item -ItemType Directory -Path $SUNCLAW_SRC -Force | Out-Null }
 
-# 3. Tải mã nguồn
-Write-Host-Color "Đang chuẩn bị mã nguồn..." "Cyan"
-$REPO_URL = "https://github.com/thangdihoc/sunclaw.git"
+# 2. Thử tải Binary từ GitHub Releases (Dành cho người không có Rust)
+Write-Host-Color "Đang kiểm tra bản cài đặt sẵn (Binary)..." "Cyan"
+$RELEASE_URL = "https://github.com/thangdihoc/sunclaw/releases/latest/download/sunclaw-x86_64-pc-windows-msvc.zip"
+$ZIP_PATH = Join-Path $env:TEMP "sunclaw.zip"
 
-Set-Location $SUNCLAW_SRC
-if (Test-Path (Join-Path $SUNCLAW_SRC ".git")) {
-    Write-Host-Color "Đã tìm thấy mã nguồn, đang cập nhật..." "Gray"
-    git pull
-} else {
-    Write-Host-Color "Đang tải mã nguồn từ GitHub..." "Gray"
-    git clone $REPO_URL .
+$INSTALL_SUCCESS = $false
+
+try {
+    Write-Host-Color "Đang tải từ: $RELEASE_URL" "Gray"
+    Invoke-WebRequest -Uri $RELEASE_URL -OutFile $ZIP_PATH -ErrorAction Stop
+    Write-Host-Color "Đã tìm thấy bản build sẵn. Đang giải nén..." "Green"
+    Expand-Archive -Path $ZIP_PATH -DestinationPath $SUNCLAW_BIN -Force
+    Remove-Item $ZIP_PATH
+    $INSTALL_SUCCESS = $true
+} catch {
+    Write-Host-Color "Không tìm thấy bản build sẵn hoặc lỗi tải về. Chuyển sang cài đặt từ mã nguồn..." "Yellow"
 }
 
-# 4. Build dự án
-Write-Host-Color "Đang biên dịch Sunclaw (Chế độ Release)..." "Cyan"
-Write-Host-Color "Lưu ý: Quá trình này có thể mất vài phút cho lần đầu tiên." "Yellow"
+# 3. Cài đặt từ mã nguồn (Nếu tải binary thất bại)
+if (!$INSTALL_SUCCESS) {
+    Write-Host-Color "Bắt đầu quy trình cài đặt từ mã nguồn (Yêu cầu Git và Rust)..." "Cyan"
 
-cargo build --release --workspace
+    if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Host-Color "Lỗi: Chưa cài đặt Git. Vui lòng cài đặt từ https://git-scm.com/" "Red"
+        exit 1
+    }
 
-# 5. Cài đặt Binary
-Write-Host-Color "Đang cài đặt binary vào hệ thống..." "Cyan"
-$BINARY_PATH = "target/release/sunclaw.exe"
-if (Test-Path $BINARY_PATH) {
-    Copy-Item $BINARY_PATH $SUNCLAW_BIN -Force
-    Write-Host-Color "Đã cài đặt: $SUNCLAW_BIN\sunclaw.exe" "Green"
-} else {
-    Write-Host-Color "Lỗi: Không tìm thấy file biên dịch." "Red"
+    if (!(Get-Command cargo -ErrorAction SilentlyContinue)) {
+        Write-Host-Color "Lỗi: Chưa cài đặt Rust. Vui lòng cài đặt từ https://rustup.rs/" "Red"
+        exit 1
+    }
+
+    if (!(Test-Path $SUNCLAW_SRC)) { New-Item -ItemType Directory -Path $SUNCLAW_SRC -Force | Out-Null }
+    
+    Set-Location $SUNCLAW_SRC
+    $REPO_URL = "https://github.com/thangdihoc/sunclaw.git"
+    if (Test-Path (Join-Path $SUNCLAW_SRC ".git")) {
+        Write-Host-Color "Cập nhật mã nguồn..." "Gray"
+        git pull
+    } else {
+        Write-Host-Color "Tải mã nguồn..." "Gray"
+        git clone $REPO_URL .
+    }
+
+    Write-Host-Color "Đang biên dịch (Release mode)..." "Cyan"
+    cargo build --release --workspace
+    
+    $BUILD_BIN = "target/release/sunclaw.exe"
+    if (Test-Path $BUILD_BIN) {
+        Copy-Item $BUILD_BIN $SUNCLAW_BIN -Force
+        $INSTALL_SUCCESS = $true
+    }
+}
+
+if (!$INSTALL_SUCCESS) {
+    Write-Host-Color "Lỗi: Cài đặt thất bại." "Red"
     exit 1
 }
 
-# 6. Cập nhật PATH (Dùng cho phiên làm việc sau)
-Write-Host-Color "Đang cập nhật biến môi trường PATH..." "Cyan"
+# 4. Cập nhật PATH
+Write-Host-Color "Cập nhật biến môi trường PATH..." "Cyan"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$SUNCLAW_BIN*") {
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$SUNCLAW_BIN", "User")
     Write-Host-Color "Đã thêm $SUNCLAW_BIN vào PATH người dùng." "Green"
 }
 
-# 7. Hoàn tất
+# 5. Hoàn tất
 Write-Host-Color "--------------------------------------------------------" "Gray"
-Write-Host-Color "CHÚC MỪNG! SUNCLAW ĐÃ SẴN SÀNG." "Green"
-Write-Host-Color "Vui lòng mở lại Terminal hoặc gõ: `$env:Path = [System.Environment]::GetEnvironmentVariable('Path','User')`" "Yellow"
+Write-Host-Color "CHÚC MỪNG! SUNCLAW ĐÃ ĐƯỢC CÀI ĐẶT THÀNH CÔNG." "Green"
+Write-Host-Color "Ghi chú: Nếu đây là lần đầu cài đặt, vui lòng MỞ LẠI TERMINAL." "Yellow"
 Write-Host-Color "Sau đó chạy lệnh: sunclaw onboard" "Cyan"
 Write-Host-Color "--------------------------------------------------------" "Gray"

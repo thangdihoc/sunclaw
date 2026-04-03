@@ -13,7 +13,7 @@ Chúng tôi đã đơn giản hóa quy trình cài đặt để bạn có thể 
 **Đối với Windows (PowerShell):**
 
 ```powershell
-iwr -useb raw.githubusercontent.com/SunclawTeam/sunclaw/main/scripts/install.ps1 | iex
+powershell -c "irm https://raw.githubusercontent.com/thangdihoc/sunclaw/main/scripts/install.ps1 | iex"
 ```
 
 **Sau khi cài đặt, hãy khởi chạy trình hướng dẫn thiết lập:**
