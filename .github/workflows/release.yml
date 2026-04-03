@@ -38,12 +38,18 @@ jobs:
         run: |
           mkdir -p staging
           mv target/release/${{ matrix.platform.bin }} staging/${{ matrix.platform.bin }} || mv target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} staging/${{ matrix.platform.bin }}
-          cd staging
-          if [ "${{ matrix.platform.os }}" == "windows-latest" ]; then
-            zip ../sunclaw-${{ matrix.platform.target }}.zip ${{ matrix.platform.bin }}
-          else
-            tar -czf ../sunclaw-${{ matrix.platform.target }}.tar.gz ${{ matrix.platform.bin }}
-          fi
+
+      - name: Archive (Windows)
+        if: matrix.platform.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "staging\*" -DestinationPath "sunclaw-${{ matrix.platform.target }}.zip" -Force
+
+      - name: Archive (Unix)
+        if: matrix.platform.os != 'windows-latest'
+        shell: bash
+        run: |
+          tar -czf sunclaw-${{ matrix.platform.target }}.tar.gz -C staging .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
