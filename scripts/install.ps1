@@ -13,20 +13,21 @@ if (-not (Test-Path -Path $INSTALL_DIR)) {
 $ARCH = $env:PROCESSOR_ARCHITECTURE
 $OS = "pc-windows-msvc"
 
-case ("$ARCH") {
+switch ($ARCH) {
     "AMD64" { $ARCH = "x86_64" }
     "ARM64" { $ARCH = "aarch64" }
     default { Write-Error "Kiến trúc $ARCH chưa được hỗ trợ."; exit 1 }
 }
 
 $ASSET_NAME = "sunclaw-$ARCH-$OS.zip"
-$DOWNLOAD_URL = "https://github.com/$REPO/releases/latest/download/$ASSET_NAME"
+$DOWNLOAD_URL = "https://github.com/$REPO/releases/download/v0.1.0/$ASSET_NAME"
 
 Write-Host "🚀 Đang tải Sunclaw $VERSION cho $ARCH-pc-windows..." -ForegroundColor Cyan
 
-# Simulating download and extract
-# Invoke-WebRequest -Uri $DOWNLOAD_URL -OutFile "sunclaw.zip"
-# Expand-Archive -Path "sunclaw.zip" -DestinationPath "$INSTALL_DIR"
+# Thực hiện tải file từ GitHub
+Invoke-WebRequest -Uri $DOWNLOAD_URL -OutFile "sunclaw.zip"
+Expand-Archive -Path "sunclaw.zip" -DestinationPath "$INSTALL_DIR" -Force
+Remove-Item "sunclaw.zip"
 
 Write-Host "✅ Đã tải và giải nén Sunclaw!" -ForegroundColor Green
 
