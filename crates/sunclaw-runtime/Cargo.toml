@@ -8,6 +8,5 @@ license.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 sunclaw-core = { path = "../sunclaw-core" }
-sunclaw-orchestrator = { path = "../sunclaw-orchestrator" }
 
 [dev-dependencies]

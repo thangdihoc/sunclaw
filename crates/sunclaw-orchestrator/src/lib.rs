@@ -1,63 +1,128 @@
-use serde::{Deserialize, Serialize};
-use sunclaw_core::AgentRole;
+use std::sync::Arc;
+use async_trait::async_trait;
+use serde_json::{json, Value};
+use sunclaw_core::{AgentContext, AgentRole, CoreError, Tool, ToolDefinition, ToolResult};
+use sunclaw_runtime::{Runtime, RuntimeOutcome};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct HandoffStep {
-    pub role: AgentRole,
-    pub instructions: String,
+/// AgentMember wraps a Sunclaw Runtime and exposes it as a Tool.
+/// This allows one Agent (the Supervisor) to call another Agent.
+pub struct AgentMember {
+    name: String,
+    description: String,
+    runtime: Arc<Runtime>,
+    // Default context for this agent member
+    context: AgentContext,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TeamFlow {
-    pub name: String,
-    pub steps: Vec<HandoffStep>,
-}
-
-impl TeamFlow {
-    pub fn planner_executor_reviewer() -> Self {
+impl AgentMember {
+    pub fn new(name: &str, description: &str, runtime: Arc<Runtime>, context: AgentContext) -> Self {
         Self {
-            name: "planner-executor-reviewer".to_string(),
-            steps: vec![
-                HandoffStep {
-                    role: AgentRole::Planner,
-                    instructions: "Break down the task into executable steps".into(),
-                },
-                HandoffStep {
-                    role: AgentRole::Executor,
-                    instructions: "Execute steps using allowed tools".into(),
-                },
-                HandoffStep {
-                    role: AgentRole::Reviewer,
-                    instructions: "Review for quality and policy compliance".into(),
-                },
-            ],
+            name: name.to_string(),
+            description: description.to_string(),
+            runtime,
+            context,
         }
-    }
-
-    pub fn validate(&self) -> Result<(), String> {
-        if self.steps.is_empty() {
-            return Err("team flow must include at least one step".to_string());
-        }
-
-        if self.steps.first().map(|s| &s.role) != Some(&AgentRole::Planner) {
-            return Err("team flow must start with Planner".to_string());
-        }
-
-        if self.steps.last().map(|s| &s.role) != Some(&AgentRole::Reviewer) {
-            return Err("team flow must end with Reviewer".to_string());
-        }
-
-        Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::TeamFlow;
+#[async_trait]
+impl Tool for AgentMember {
+    fn name(&self) -> &'static str {
+        // We use a Boxed string or leak it for the &'static str requirement of the trait
+        // For simplicity in this framework, we might need to change the Tool trait 
+        // to return String or handle this differently.
+        // For now, let's just use a leaky string to satisfy the current trait.
+        Box::leak(self.name.clone().into_boxed_str())
+    }
 
-    #[test]
-    fn default_flow_is_valid() {
-        let flow = TeamFlow::planner_executor_reviewer();
-        assert!(flow.validate().is_ok());
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": format!("The specific task for the {} agent to perform.", self.name)
+                    }
+                },
+                "required": ["task"]
+            }),
+        }
+    }
+
+    async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {
+        let args: Value = serde_json::from_str(input).map_err(|e| {
+            CoreError::Tool(format!("Invalid arguments for agent member {}: {}", self.name, e))
+        })?;
+        
+        let task = args["task"].as_str().ok_or_else(|| {
+            CoreError::Tool("Missing 'task' parameter for agent call".to_string())
+        })?;
+
+        tracing::info!("Delegating task to agent {}: {}", self.name, task);
+
+        // Run the member agent
+        let outcome = self.runtime.run_once(&self.context, task).await?;
+
+        Ok(ToolResult {
+            output: outcome.output,
+        })
+    }
+}
+
+/// A step in a sequential multi-agent flow.
+pub struct TeamStep {
+    pub role: AgentRole,
+}
+
+/// A pre-defined flow for a team of agents.
+pub struct TeamFlow {
+    pub steps: Vec<TeamStep>,
+}
+
+/// Orchestrator manages a collection of agents and provides coordination patterns.
+pub struct Orchestrator {
+    supervisor_runtime: Arc<Runtime>,
+}
+
+impl Orchestrator {
+    pub fn new(supervisor_runtime: Arc<Runtime>) -> Self {
+        Self {
+            supervisor_runtime,
+        }
+    }
+
+    /// Process a high-level goal through the supervisor (Hierarchical pattern).
+    /// The supervisor must have AgentMembers registered as tools in its runtime.
+    pub async fn run_hierarchical(&self, ctx: &AgentContext, goal: &str) -> Result<RuntimeOutcome, CoreError> {
+        let mut supervisor_context = ctx.clone();
+        supervisor_context.role = Some(AgentRole::Planner);
+        
+        self.supervisor_runtime.run_once(&supervisor_context, goal).await
+    }
+
+    /// Run a sequential flow where each agent's output is the next agent's input.
+    pub async fn run_sequential(
+        &self,
+        ctx: &AgentContext,
+        initial_input: &str,
+        flow: &TeamFlow,
+    ) -> Result<Vec<RuntimeOutcome>, CoreError> {
+        let mut outcomes = Vec::new();
+        let mut current_input = initial_input.to_string();
+
+        for (i, step) in flow.steps.iter().enumerate() {
+            let mut step_ctx = ctx.clone();
+            step_ctx.role = Some(step.role.clone());
+            step_ctx.trace_id = format!("{}-step-{}", ctx.trace_id, i);
+
+            let outcome = self.supervisor_runtime.run_once(&step_ctx, &current_input).await?;
+            current_input = outcome.output.clone();
+            outcomes.push(outcome);
+        }
+
+        Ok(outcomes)
     }
 }

@@ -5,5 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-serde.workspace = true
 sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-runtime = { path = "../sunclaw-runtime" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = "0.1"
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+schemars = "1.2.1"

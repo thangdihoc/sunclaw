@@ -5,7 +5,6 @@ use sunclaw_core::{
     AgentContext, AuditDecision, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message,
     ModelProvider, PolicyEngine, Role, Tool,
 };
-use sunclaw_orchestrator::TeamFlow;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeOptions {
@@ -106,38 +105,6 @@ impl Runtime {
         self.tools.insert(tool.name().to_string(), tool);
     }
 
-    pub async fn run_team_flow(
-        &self,
-        ctx: &AgentContext,
-        user_input: &str,
-        flow: &TeamFlow,
-    ) -> Result<Vec<RuntimeOutcome>, CoreError> {
-        let mut outcomes = Vec::new();
-        let mut current_input = user_input.to_string();
-
-        for step in &flow.steps {
-            let mut step_ctx = ctx.clone();
-            step_ctx.role = Some(step.role.clone());
-
-            // Add role-specific system instruction as a temporary message if needed
-            // For now, we trust the memory has the context or we append a system message
-            self.memory
-                .append_message(
-                    &ctx.trace_id,
-                    Message {
-                        role: Role::System,
-                        content: step.role.get_system_instructions(),
-                    },
-                )
-                .await?;
-
-            let outcome = self.run_once(&step_ctx, &current_input).await?;
-            current_input = outcome.output.clone();
-            outcomes.push(outcome);
-        }
-
-        Ok(outcomes)
-    }
 
     pub async fn run_once(
         &self,

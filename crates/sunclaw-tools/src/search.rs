@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use sunclaw_core::{CoreError, Tool, ToolResult};
+use sunclaw_core::{sunclaw_tool, CoreError, Tool, ToolResult};
+use schemars::JsonSchema;
 
 pub struct WebSearchTool {
     api_key: String,
@@ -38,45 +39,35 @@ struct TavilyResult {
     content: String,
 }
 
-#[async_trait]
-impl Tool for WebSearchTool {
-    fn name(&self) -> &'static str {
-        "web_search"
-    }
+#[derive(Deserialize, JsonSchema)]
+pub struct SearchArgs {
+    /// Từ khóa tìm kiếm trên internet.
+    pub query: String,
+}
 
-    fn definition(&self) -> sunclaw_core::ToolDefinition {
-        sunclaw_core::ToolDefinition {
-            name: "web_search".to_string(),
-            description: "Tìm kiếm thông tin trên internet để trả lời các câu hỏi về tin tức, sự kiện hiện tại hoặc kiến thức chuyên sâu.".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Từ khóa tìm kiếm"
-                    }
-                },
-                "required": ["query"]
-            }),
-        }
-    }
-
-    async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {
-        if self.api_key == "secret" || self.api_key.is_empty() {
+sunclaw_tool!(
+    WebSearchTool,
+    SearchArgs,
+    "web_search",
+    "Tìm kiếm thông tin trên internet để trả lời các câu hỏi về tin tức, sự kiện hiện tại hoặc kiến thức chuyên sâu.",
+    self_obj,
+    args,
+    {
+        if self_obj.api_key == "secret" || self_obj.api_key.is_empty() {
             return Ok(ToolResult {
-                output: "[Mock Search] No API key provided. Search query was: ".to_string() + input,
+                output: format!("[Mock Search] No API key provided. Search query was: {}", args.query),
             });
         }
 
         let request = TavilyRequest {
-            api_key: self.api_key.clone(),
-            query: input.to_string(),
+            api_key: self_obj.api_key.clone(),
+            query: args.query.clone(),
             search_depth: "basic".to_string(),
             include_answer: true,
             max_results: 3,
         };
 
-        let response = self
+        let response = self_obj
             .client
             .post("https://api.tavily.com/search")
             .json(&request)
@@ -107,4 +98,4 @@ impl Tool for WebSearchTool {
 
         Ok(ToolResult { output })
     }
-}
+);

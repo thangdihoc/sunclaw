@@ -146,3 +146,27 @@ pub trait MemoryStore: Send + Sync {
     async fn load_messages(&self, trace_id: &str) -> Result<Vec<Message>, CoreError>;
     async fn append_message(&self, trace_id: &str, message: Message) -> Result<(), CoreError>;
 }
+
+#[macro_export]
+macro_rules! sunclaw_tool {
+    ($struct_name:ident, $args_type:ty, $name:expr, $desc:expr, $self_name:ident, $args_name:ident, $exec:block) => {
+        #[async_trait]
+        impl $crate::Tool for $struct_name {
+            fn name(&self) -> &'static str { $name }
+            fn definition(&self) -> $crate::ToolDefinition {
+                let schema = schemars::schema_for!($args_type);
+                $crate::ToolDefinition {
+                    name: $name.to_string(),
+                    description: $desc.to_string(),
+                    parameters: serde_json::to_value(schema).unwrap(),
+                }
+            }
+            async fn run(&self, input: &str) -> Result<$crate::ToolResult, $crate::CoreError> {
+                let $args_name: $args_type = serde_json::from_str(input)
+                    .map_err(|e| $crate::CoreError::Tool(format!("Invalid arguments for tool {}: {}", $name, e)))?;
+                let $self_name = self;
+                $exec
+            }
+        }
+    };
+}
