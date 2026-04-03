@@ -2,7 +2,7 @@
 # Cài đặt Sunclaw AI Agent Runtime
 
 $VERSION = "latest"
-$REPO = "openclaw/sunclaw"
+$REPO = "thangdihoc/sunclaw"
 $BINARY_NAME = "sunclaw.exe"
 $INSTALL_DIR = "$HOME\.sunclaw\bin"
 
@@ -13,10 +13,13 @@ if (-not (Test-Path -Path $INSTALL_DIR)) {
 $ARCH = $env:PROCESSOR_ARCHITECTURE
 $OS = "pc-windows-msvc"
 
-switch ($ARCH) {
-    "AMD64" { $ARCH = "x86_64" }
-    "ARM64" { $ARCH = "aarch64" }
-    default { Write-Error "Kiến trúc $ARCH chưa được hỗ trợ."; exit 1 }
+if ($ARCH -eq "AMD64") {
+    $ARCH = "x86_64"
+} elseif ($ARCH -eq "ARM64") {
+    $ARCH = "aarch64"
+} else {
+    Write-Error "Kiến trúc $ARCH chưa được hỗ trợ."
+    exit 1
 }
 
 $ASSET_NAME = "sunclaw-$ARCH-$OS.zip"
