@@ -74,7 +74,7 @@ pub struct AgentContext {
     pub max_tokens: Option<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditEvent {
     pub trace_id: String,
     pub skill: Option<String>,
@@ -82,7 +82,7 @@ pub struct AuditEvent {
     pub decision: AuditDecision,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuditDecision {
     Allowed,
     Denied(String),
@@ -139,12 +139,14 @@ pub trait PolicyEngine: Send + Sync {
 #[async_trait]
 pub trait AuditStore: Send + Sync {
     async fn append_event(&self, event: AuditEvent) -> Result<(), CoreError>;
+    async fn load_events(&self, trace_id: &str) -> Result<Vec<AuditEvent>, CoreError>;
 }
 
 #[async_trait]
 pub trait MemoryStore: Send + Sync {
     async fn load_messages(&self, trace_id: &str) -> Result<Vec<Message>, CoreError>;
     async fn append_message(&self, trace_id: &str, message: Message) -> Result<(), CoreError>;
+    async fn list_traces(&self) -> Result<Vec<String>, CoreError>;
 }
 
 #[macro_export]
@@ -169,4 +171,16 @@ macro_rules! sunclaw_tool {
             }
         }
     };
+}
+#[async_trait]
+pub trait Bridge: Send + Sync {
+    fn name(&self) -> &'static str;
+    async fn start(&self) -> Result<(), CoreError>;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BridgeConfig {
+    pub name: String,
+    pub enabled: bool,
+    pub settings: serde_json::Value,
 }

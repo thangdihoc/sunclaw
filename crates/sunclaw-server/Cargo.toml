@@ -17,3 +17,5 @@ sunclaw-app = { path = "../sunclaw-app" }
 sunclaw-core = { path = "../sunclaw-core" }
 sunclaw-runtime = { path = "../sunclaw-runtime" }
 anyhow = { workspace = true }
+rust-embed = "8.0"
+mime_guess = "2.0"

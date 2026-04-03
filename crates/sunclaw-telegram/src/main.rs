@@ -23,8 +23,9 @@ async fn main() -> anyhow::Result<()> {
     let runtime = Arc::new(build_runtime(None).await);
 
     // Create and run the bridge
-    let bridge = TelegramBridge::new(runtime, authorized_chat_id);
-    bridge.run(token).await?;
+    use sunclaw_core::Bridge;
+    let bridge = TelegramBridge::new(runtime, token, Some(authorized_chat_id));
+    bridge.start().await.map_err(|e| anyhow::anyhow!(e))?;
 
     Ok(())
 }

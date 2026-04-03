@@ -104,13 +104,19 @@ async fn main() -> Result<()> {
                 .interact()?;
 
             let chat_id_str: String = Input::with_theme(&theme)
-                .with_prompt("Nhập Authorized Chat ID (ID của bạn)")
+                .with_prompt("Nhập Authorized Chat ID (ID của bạn - để trống nếu cho phép tất cả)")
+                .allow_empty(true)
                 .interact_text()?;
 
-            let chat_id: i64 = chat_id_str.parse().expect("Chat ID phải là một con số!");
+            let chat_id: Option<i64> = if chat_id_str.is_empty() {
+                None
+            } else {
+                Some(chat_id_str.parse().expect("Chat ID phải là một con số!"))
+            };
 
-            let bridge = TelegramBridge::new(runtime, chat_id);
-            bridge.run(token).await?;
+            use sunclaw_core::Bridge;
+            let bridge = TelegramBridge::new(runtime, token, chat_id);
+            bridge.start().await.map_err(|e| anyhow::anyhow!(e))?;
         }
         _ => unreachable!(),
     }

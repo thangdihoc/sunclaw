@@ -92,6 +92,17 @@ impl MemoryStore for SqliteStore {
 
         Ok(())
     }
+
+    async fn list_traces(&self) -> Result<Vec<String>, CoreError> {
+        let rows = sqlx::query_as::<_, TraceRow>(
+            "SELECT DISTINCT trace_id FROM messages ORDER BY id DESC LIMIT 50",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to list traces: {e}")))?;
+
+        Ok(rows.into_iter().map(|r| r.trace_id).collect())
+    }
 }
 
 #[async_trait]
@@ -116,10 +127,44 @@ impl AuditStore for SqliteStore {
 
         Ok(())
     }
+
+    async fn load_events(&self, trace_id: &str) -> Result<Vec<AuditEvent>, CoreError> {
+        let rows = sqlx::query_as::<_, AuditEventRow>(
+            "SELECT trace_id, skill, tool_name, decision, reason FROM audit_events WHERE trace_id = ? ORDER BY id ASC",
+        )
+        .bind(trace_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to load events: {e}")))?;
+
+        Ok(rows.into_iter().map(|r| AuditEvent {
+            trace_id: r.trace_id,
+            skill: r.skill,
+            tool_name: r.tool_name,
+            decision: match r.decision.as_str() {
+                "denied" => AuditDecision::Denied(r.reason.unwrap_or_default()),
+                _ => AuditDecision::Allowed,
+            },
+        }).collect())
+    }
 }
 
 #[derive(sqlx::FromRow)]
 struct MessageRow {
     role: String,
     content: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct TraceRow {
+    trace_id: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct AuditEventRow {
+    trace_id: String,
+    skill: Option<String>,
+    tool_name: String,
+    decision: String,
+    reason: Option<String>,
 }

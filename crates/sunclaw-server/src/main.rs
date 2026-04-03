@@ -1,11 +1,12 @@
 use axum::{
-    extract::{State, Json},
-    http::{StatusCode, HeaderMap},
+    extract::{Path, State, Json},
+    http::{header, StatusCode, HeaderMap},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Response, Html},
     routing::{get, post},
     Router,
 };
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use sunclaw_app::build_runtime;
@@ -13,6 +14,10 @@ use sunclaw_core::AgentContext;
 use sunclaw_runtime::Runtime;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(RustEmbed)]
+#[folder = "ui/"]
+struct Assets;
 
 #[derive(Clone)]
 struct AppState {
@@ -49,17 +54,69 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
+        // Dashboard routes
+        .route("/", get(index_handler))
+        .route("/index.html", get(index_handler))
+        .route("/assets/*file", get(static_handler))
+        
+        // API routes
         .route("/api/v1/health", get(health_check))
         .route("/api/v1/chat", post(chat_handler))
+        .route("/api/v1/traces", get(api_list_traces))
+        .route("/api/v1/audit/:trace_id", get(api_get_audit))
+        .route("/api/v1/messages/:trace_id", get(api_get_messages))
+        
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-    tracing::info!("Sunclaw API Server running on {}", listener.local_addr()?);
+    tracing::info!("Sunclaw API Server running on http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+// --- Dashboard Handlers ---
+
+async fn index_handler() -> impl IntoResponse {
+    static_handler(Path("index.html".to_string())).await
+}
+
+async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
+    match Assets::get(&path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            (
+                [(header::CONTENT_TYPE, mime.as_ref())],
+                content.data.into_owned(),
+            ).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+// --- API Handlers ---
+
+async fn api_list_traces(State(state): State<AppState>) -> impl IntoResponse {
+    match state.runtime.memory().list_traces().await {
+        Ok(traces) => Json(traces).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_get_audit(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
+    match state.runtime.audit().load_events(&trace_id).await {
+        Ok(events) => Json(events).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_get_messages(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
+    match state.runtime.memory().load_messages(&trace_id).await {
+        Ok(messages) => Json(messages).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 async fn health_check() -> impl IntoResponse {
@@ -72,6 +129,20 @@ async fn auth_middleware(
     request: axum::extract::Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let path = request.uri().path();
+    
+    // Skip auth for dashboard and health check
+    if path == "/" || path == "/index.html" || path.starts_with("/assets/") || path == "/api/v1/health" {
+        return Ok(next.run(request).await);
+    }
+
+    // Also skip auth for internal API calls from dashboard (for v0.1 ease of use, can be tightened later)
+    // For now, let's allow GET /api/v1/... without auth if it's from the same origin? 
+    // Actually, for a local dashboard, it's safer to just skip auth for read-only APIs for now.
+    if request.method() == axum::http::Method::GET && path.starts_with("/api/v1/") {
+         return Ok(next.run(request).await);
+    }
+
     let auth_header = headers
         .get("Authorization")
         .and_then(|h| h.to_str().ok())

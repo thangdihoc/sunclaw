@@ -105,6 +105,14 @@ impl Runtime {
         self.tools.insert(tool.name().to_string(), tool);
     }
 
+    pub fn memory(&self) -> Arc<dyn MemoryStore> {
+        self.memory.clone()
+    }
+
+    pub fn audit(&self) -> Arc<dyn AuditStore> {
+        self.audit.clone()
+    }
+
 
     pub async fn run_once(
         &self,

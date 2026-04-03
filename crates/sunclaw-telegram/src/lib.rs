@@ -1,58 +1,73 @@
 use std::sync::Arc;
 use teloxide::prelude::*;
+use async_trait::async_trait;
+use sunclaw_core::{Bridge, CoreError, AgentContext};
+use sunclaw_app::build_runtime;
 use sunclaw_runtime::Runtime;
-use sunclaw_core::AgentContext;
-use anyhow::Result;
 
 pub struct TelegramBridge {
     runtime: Arc<Runtime>,
-    authorized_chat_id: i64,
+    token: String,
+    authorized_chat_id: Option<i64>,
 }
 
 impl TelegramBridge {
-    pub fn new(runtime: Arc<Runtime>, authorized_chat_id: i64) -> Self {
+    pub fn new(runtime: Arc<Runtime>, token: String, authorized_chat_id: Option<i64>) -> Self {
         Self {
             runtime,
+            token,
             authorized_chat_id,
         }
     }
+}
 
-    pub async fn run(&self, token: String) -> Result<()> {
-        let bot = Bot::new(token);
+#[async_trait]
+impl Bridge for TelegramBridge {
+    fn name(&self) -> &'static str {
+        "telegram"
+    }
+
+    async fn start(&self) -> Result<(), CoreError> {
+        let bot = Bot::new(&self.token);
         let runtime = self.runtime.clone();
-        let authorized_chat_id = self.authorized_chat_id;
+        let auth_id = self.authorized_chat_id;
 
-        println!("Sunclaw Telegram Bot is starting for chat_id: {}...", authorized_chat_id);
+        println!("! [Telegram] Starting bot...");
 
         teloxide::repl(bot, move |bot: Bot, msg: Message| {
             let runtime = runtime.clone();
-            let authorized_chat_id = authorized_chat_id;
-            
             async move {
-                // Security Check: Only respond to authorized chat ID
-                if msg.chat.id.0 != authorized_chat_id {
-                    // Ignore or send a polite decline if it's the first time
+                let chat_id = msg.chat.id;
+                
+                // Security check
+                if let Some(authorized) = auth_id {
+                    if chat_id.0 != authorized {
+                        println!("! [Telegram] Unauthorized access attempt from {}", chat_id);
+                        bot.send_message(chat_id, "🚫 Bạn không có quyền truy cập Bot này.").await?;
+                        return Ok(());
+                    }
+                }
+
+                let user_text = msg.text().unwrap_or("");
+                if user_text.is_empty() {
                     return Ok(());
                 }
 
-                if let Some(text) = msg.text() {
-                    let _ = bot.send_chat_action(msg.chat.id, teloxide::types::ChatAction::Typing).await;
+                let trace_id = format!("tg-{}", chat_id);
+                let ctx = AgentContext {
+                    trace_id,
+                    skill: Some("telegram".to_string()),
+                    model_profile: Some("default".to_string()),
+                    role: None,
+                    max_tokens: None,
+                };
 
-                    let ctx = AgentContext {
-                        trace_id: format!("tg-{}", msg.id.0),
-                        skill: None,
-                        model_profile: None,
-                        role: None,
-                        max_tokens: None,
-                    };
-
-                    match runtime.run_once(&ctx, text).await {
-                        Ok(outcome) => {
-                            bot.send_message(msg.chat.id, outcome.output).await?;
-                        }
-                        Err(e) => {
-                            bot.send_message(msg.chat.id, format!("⚠️ Lỗi hệ thống: {:?}", e)).await?;
-                        }
+                match runtime.run_once(&ctx, user_text).await {
+                    Ok(outcome) => {
+                        bot.send_message(chat_id, outcome.output).await?;
+                    }
+                    Err(e) => {
+                        bot.send_message(chat_id, format!("❌ Lỗi: {}", e)).await?;
                     }
                 }
                 Ok(())
