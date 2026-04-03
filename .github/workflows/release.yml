@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p staging
-          mv target/release/sunclaw staging/${{ matrix.platform.bin }} || mv target/${{ matrix.platform.target }}/release/sunclaw staging/${{ matrix.platform.bin }}
+          mv target/release/${{ matrix.platform.bin }} staging/${{ matrix.platform.bin }} || mv target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} staging/${{ matrix.platform.bin }}
           cd staging
           if [ "${{ matrix.platform.os }}" == "windows-latest" ]; then
             zip ../sunclaw-${{ matrix.platform.target }}.zip ${{ matrix.platform.bin }}
