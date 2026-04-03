@@ -3,12 +3,14 @@ mod tui;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Password, Select};
+use dialoguer::{theme::ColorfulTheme, Password, Select, Input};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use sysinfo::System;
+use indicatif::{ProgressBar, ProgressStyle};
+use std::time::Duration;
 
 use sunclaw_app::{build_runtime, RuntimeConfig};
 use sunclaw_telegram::TelegramBridge;
@@ -44,9 +46,15 @@ struct Config {
     api_key: String,
     tavily_key: Option<String>,
     tele_token: Option<String>,
+    #[serde(default = "default_model")]
+    model_id: String,
 }
 
-fn get_config_path() -> PathBuf {
+fn default_model() -> String {
+    "deepseek/deepseek-chat".to_string()
+}
+
+fn get_config_dir() -> PathBuf {
     let mut path = home::home_dir().unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     });
@@ -54,6 +62,11 @@ fn get_config_path() -> PathBuf {
     if !path.exists() {
         fs::create_dir_all(&path).ok();
     }
+    path
+}
+
+fn get_config_path() -> PathBuf {
+    let mut path = get_config_dir();
     path.push("config.toml");
     path
 }
@@ -65,14 +78,8 @@ fn load_config() -> Result<Config> {
         let config: Config = toml::from_str(&content)?;
         Ok(config)
     } else {
-        // Fallback to .env for backward compatibility
-        let _ = dotenvy::dotenv();
-        Ok(Config {
-            provider: std::env::var("SUNCLAW_PROVIDER").unwrap_or_else(|_| "openrouter".to_string()),
-            api_key: std::env::var("SUNCLAW_API_KEY").unwrap_or_default(),
-            tavily_key: std::env::var("TAVILY_API_KEY").ok(),
-            tele_token: std::env::var("TELEGRAM_BOT_TOKEN").ok(),
-        })
+        println!("{}", "⚠️  Không tìm thấy config.toml, đang sử dụng mặc định...".yellow());
+        Ok(Config::default())
     }
 }
 
@@ -85,16 +92,16 @@ fn save_config(config: &Config) -> Result<()> {
 
 fn show_header() {
     let art = r#"
-   _____ _    _ _   _  _____ _          __          __
-  / ____| |  | | \ | |/ ____| |         \ \        / /
- | (___ | |  | |  \| | |    | |   __ _   \ \  /\  / / 
-  \___ \| |  | | . ` | |    | |  / _` |   \ \/  \/ /  
-  ____) | |__| | |\  | |____| | | (_| |    \  /\  /   
- |_____/ \____/|_| \_|\_____|_|  \__,_|     \/  \/    
+   ███████╗██╗   ██╗███╗   ██╗ ██████╗██╗      █████╗ ██╗    ██╗
+   ██╔════╝██║   ██║████╗  ██║██╔════╝██║     ██╔══██╗██║    ██║
+   ███████╗██║   ██║██╔██╗ ██║██║     ██║     ███████║██║ █╗ ██║
+   ╚════██║██║   ██║██║╚██╗██║██║     ██║     ██╔══██║██║███╗██║
+   ███████║╚██████╔╝██║ ╚████║╚██████╗███████╗██║  ██║╚███╔███╔╝
+   ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ 
     "#;
     println!("{}", art.bright_yellow().bold());
-    println!("{}", "   >>> AI Agent Hiệu năng cao cho kỷ nguyên mới <<<".bright_cyan());
-    println!("{}", "       -----------------------------------------".bright_black());
+    println!("{}", "   >>> HỆ THỐNG AI AGENT ĐA KÊNH - HIỆU NĂNG VƯỢT TRỘI <<<".bright_cyan());
+    println!("{}", "       ----------------------------------------------------".bright_black());
     println!();
 }
 
@@ -103,7 +110,7 @@ fn show_system_info() {
     sys.refresh_all();
 
     println!("{}", "╔════════════════════════════════════════════════════════════╗".bright_black());
-    println!("║ {:^58} ║", "📊 TRẠNG THÁI HỆ THỐNG".bold().bright_white());
+    println!("║ {:^58} ║", "📊 THÔNG SỐ HỆ THỐNG".bold().bright_white());
     println!("{}", "╠════════════════════════════════════════════════════════════╣".bright_black());
     
     let cpu_brand = sys.cpus().get(0).map(|c| c.brand()).unwrap_or("Unknown");
@@ -121,12 +128,12 @@ fn show_system_info() {
 
 async fn run_onboard(theme: &ColorfulTheme) -> Result<()> {
     println!("{}", "✨ CHÀO MỪNG BẠN ĐẾN VỚI SUNCLAW ✨".bright_white().on_bright_magenta().bold());
-    println!("{}", "Hãy cùng thiết lập môi trường làm việc của bạn trong nháy mắt.\n".bright_black());
+    println!("{}", "Hành trình xây dựng AI Agent của bạn bắt đầu từ đây.\n".bright_black());
 
     // 1. Chọn Nhà cung cấp AI
-    let providers = &["OpenRouter (Khuyên dùng)", "OpenAI", "Anthropic (Claude)", "Google Gemini"];
+    let providers = &["OpenRouter (Khuyên dùng)", "OpenAI", "Anthropic (Claude)", "Google Gemini", "Custom (OpenAI Compatible)"];
     let provider_idx = Select::with_theme(theme)
-        .with_prompt("🎯 Chọn bộ não (AI Provider) cho Agent của bạn")
+        .with_prompt("🎯 Chọn 'bộ não' cho Agent của bạn")
         .items(providers)
         .default(0)
         .interact()?;
@@ -136,74 +143,140 @@ async fn run_onboard(theme: &ColorfulTheme) -> Result<()> {
         1 => "openai",
         2 => "anthropic",
         3 => "googlegemini",
+        4 => "custom",
         _ => "openrouter",
     };
 
     // 2. Nhập API Key
-    println!("\n{}", format!("🔑 Thiết lập API Key cho {}:", providers[provider_idx]).bold());
+    println!("\n{}", format!("🔑 Thiết lập API Key cho {}:", providers[provider_idx].bright_blue()).bold());
     let api_key: String = Password::with_theme(theme)
-        .with_prompt("Nhập API Key của bạn (Sẽ được ẩn đi)")
+        .with_prompt("Nhập API Key (Mật mã của bạn)")
         .interact()?;
 
     if api_key.is_empty() {
-        println!("{}", "❌ API Key không được để trống!".red());
+        println!("{}", "❌ Lỗi: API Key không được để trống!".red());
         return Ok(());
     }
 
-    // 3. Nhập Tavily Key cho Web Search
-    println!("\n{}", "🌐 Khả năng truy cập Internet (Tùy chọn):".bold());
+    // 3. Chọn Model ID
+    let mut model_id: String = match provider_name {
+        "openrouter" => "deepseek/deepseek-chat".to_string(),
+        "openai" => "gpt-4o".to_string(),
+        "anthropic" => "claude-3-5-sonnet-20240620".to_string(),
+        "googlegemini" => "gemini-1.5-pro".to_string(),
+        _ => "default".to_string(),
+    };
+
+    let change_model = Select::with_theme(theme)
+        .with_prompt(format!("🤖 Model mặc định là '{}'. Bạn có muốn đổi không?", model_id.bright_yellow()))
+        .items(&["Sử dụng mặc định", "Nhập Model ID tùy chỉnh"])
+        .default(0)
+        .interact()?;
+
+    if change_model == 1 {
+        model_id = Input::with_theme(theme)
+            .with_prompt("Nhập Model ID (VD: deepseek/deepseek-reasoner)")
+            .interact_text()?;
+    }
+
+    // 4. Các cấu hình tùy chọn khác
+    println!("\n{}", "🌐 Mở rộng khả năng (Tùy chọn, nhấn Enter để bỏ qua):".bold());
     let tavily_key: String = Password::with_theme(theme)
-        .with_prompt("Nhập Tavily API Key (Dùng cho Web Search, nhấn Enter để bỏ qua)")
+        .with_prompt("Tavily API Key (Tìm kiếm Web)")
         .allow_empty_password(true)
         .interact()?;
 
-    // 4. Nhập Telegram Token cho Bot
-    println!("\n{}", "🤖 Kết nối Telegram Bot (Tùy chọn):".bold());
     let tele_token: String = Password::with_theme(theme)
-        .with_prompt("Nhập Telegram Bot Token (Nhấn Enter để bỏ qua)")
+        .with_prompt("Telegram Bot Token (Kết nối Bot)")
         .allow_empty_password(true)
         .interact()?;
 
     let config = Config {
         provider: provider_name.to_string(),
         api_key,
+        model_id,
         tavily_key: if tavily_key.is_empty() { None } else { Some(tavily_key) },
         tele_token: if tele_token.is_empty() { None } else { Some(tele_token) },
     };
 
+    // Hiệu ứng lưu cấu hình
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
+    pb.enable_steady_tick(Duration::from_millis(100));
+    pb.set_message("Đang mã hóa và lưu cấu hình...");
+    
+    tokio::time::sleep(Duration::from_secs(1)).await;
     save_config(&config)?;
     
-    println!("\n{}", "🚀 CẤU HÌNH HOÀN TẤT!".bright_green().bold());
-    println!("{}", format!("📁 Đã lưu tại: {:?}", get_config_path()).bright_black());
-    println!("{}", "Giờ đây bạn có thể chạy lệnh 'sunclaw chat' để bắt đầu!".bright_yellow());
+    pb.finish_with_message("✅ Đã lưu cấu hình thành công!");
+
+    println!("\n{}", "🎉 CHÚC MỪNG! HỆ THỐNG ĐÃ SẴN SÀNG.".bright_green().bold());
+    println!("{}", format!("📁 Thư mục cấu hình: {:?}", get_config_dir()).bright_black());
+    println!("{}", "👉 Gõ 'sunclaw chat' để bắt đầu trò chuyện ngay.".bright_yellow());
     
     Ok(())
 }
 
-fn run_doctor() -> Result<()> {
-    println!("{}", "🔍 Đang kiểm tra hệ thống Sunclaw...".bright_cyan().bold());
-    println!();
+async fn run_doctor() -> Result<()> {
+    println!("{}", "🔍 ĐANG CHẨN ĐOÁN HỆ THỐNG SUNCLAW...".bright_cyan().bold());
+    
+    let pb = ProgressBar::new(4);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+        .unwrap()
+        .progress_chars("#>-"));
 
-    // 1. Kiểm tra file config
+    // 1. Kiểm tra cấu hình
+    pb.set_message("Kiểm tra file cấu hình...");
     let config_path = get_config_path();
-    if config_path.exists() {
-        println!("✅ File cấu hình: {} ({:?})", "Tìm thấy".green(), config_path);
-    } else if Path::new(".env").exists() {
-        println!("{}", format!("⚠️  Cấu hình: {} (Đang dùng .env, khuyên dùng --onboard để đồng bộ)", "Sử dụng .env".yellow()));
+    let config_status = if config_path.exists() {
+        format!("✅ Tìm thấy config tại {:?}", config_path).green()
     } else {
-        println!("❌ Cấu hình: {}", "Không tìm thấy (Cần chạy sunclaw onboard)".red());
-    }
+        "❌ Thiếu file config.toml (Hãy chạy 'sunclaw onboard')".red()
+    };
+    pb.inc(1);
 
     // 2. Kiểm tra Database
+    pb.set_message("Kiểm tra cơ sở dữ liệu...");
     let db_path = "sunclaw.db";
-    if Path::new(db_path).exists() {
-        println!("✅ Database: {} ({})", "Kết nối tốt".green(), db_path);
+    let db_status = if Path::new(db_path).exists() {
+        format!("✅ Kết nối SQL tốt ({})", db_path).green()
     } else {
-        println!("⚠️  Database: {} (Sẽ được tạo khi chạy Agent)", "Chưa khởi tạo".yellow());
-    }
+        "⚠️  Database chưa khởi tạo (Sẽ tự động tạo khi chạy)".yellow()
+    };
+    pb.inc(1);
 
-    println!();
-    println!("{}", "--- Hoàn tất kiểm tra ---".bright_black());
+    // 3. Kiểm tra kết nối mạng
+    pb.set_message("Kiểm tra kết nối Internet...");
+    let client = reqwest::Client::new();
+    let net_status = match client.get("https://google.com").timeout(Duration::from_secs(3)).send().await {
+        Ok(_) => "✅ Internet ổn định".green(),
+        Err(_) => "❌ Không có kết nối mạng!".red(),
+    };
+    pb.inc(1);
+
+    // 4. Kiểm tra quyền ghi
+    pb.set_message("Kiểm tra quyền ghi thư mục...");
+    let write_status = match fs::write(get_config_dir().join(".write_test"), "test") {
+        Ok(_) => {
+            let _ = fs::remove_file(get_config_dir().join(".write_test"));
+            "✅ Có quyền ghi hệ thống".green()
+        },
+        Err(_) => "❌ Không có quyền ghi vào .sunclaw!".red(),
+    };
+    pb.inc(1);
+
+    pb.finish_with_message("Hoàn tất chẩn đoán.");
+
+    println!("\n╔════════════════════════════════════════════════════════════╗");
+    println!("║ {:^58} ║", "📋 BÁO CÁO CHI TIẾT".bold().bright_white());
+    println!("╠════════════════════════════════════════════════════════════╣");
+    println!("║ ⚙️  Cấu hình: {:<47} ║", config_status);
+    println!("║ 📦 Database: {:<47} ║", db_status);
+    println!("║ 🌐 Mạng    : {:<47} ║", net_status);
+    println!("║ 📝 Quyền   : {:<47} ║", write_status);
+    println!("╚════════════════════════════════════════════════════════════╝");
+
     Ok(())
 }
 
@@ -213,10 +286,9 @@ async fn main() -> Result<()> {
     let theme = ColorfulTheme::default();
 
     show_header();
-    show_system_info();
-
+    
     if cli.doctor {
-        run_doctor()?;
+        run_doctor().await?;
         return Ok(());
     }
 
@@ -234,6 +306,7 @@ async fn main() -> Result<()> {
              start_telegram(config, &theme).await?;
         }
         Some(Commands::Chat) | None => {
+            show_system_info();
             let config = load_config()?;
             if config.api_key.is_empty() {
                  println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
@@ -241,8 +314,10 @@ async fn main() -> Result<()> {
             }
             
             // Nếu người dùng không chỉ định lệnh và file config chưa tồn tại, gợi ý onboard
-            if !get_config_path().exists() && !Path::new(".env").exists() {
+            if !get_config_path().exists() {
+                 println!("{}", "🔍 Chào mừng bạn mới! Đang khởi động trình hướng dẫn thiết lập...".cyan());
                  run_onboard(&theme).await?;
+                 return Ok(());
             }
 
             start_terminal_chat(config, &theme).await?;
@@ -253,25 +328,16 @@ async fn main() -> Result<()> {
 }
 
 async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme) -> Result<()> {
-    // Mặc định chọn model
-    let model_id = match config.provider.as_str() {
-        "openrouter" => "deepseek/deepseek-chat",
-        "openai" => "gpt-4o",
-        "anthropic" => "claude-3-5-sonnet-20240620",
-        "googlegemini" => "gemini-1.5-pro",
-        _ => "default",
-    }.to_string();
-
     let runtime_config = RuntimeConfig {
         provider: config.provider,
-        model_id,
+        model_id: config.model_id,
         api_key: config.api_key,
         tavily_key: config.tavily_key,
     };
 
     let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
 
-    println!("\n--- 🗨️ Đang khởi động Sunclaw TUI (Ratatui) ---");
+    println!("\n--- 🗨️ Đang khởi động Sunclaw TUI Dashboard ---");
     run_tui(runtime).await.map_err(|e| anyhow::anyhow!(e))?;
     
     Ok(())
@@ -289,18 +355,9 @@ async fn start_telegram(config: Config, theme: &ColorfulTheme) -> Result<()> {
          return Ok(());
     }
 
-    // Tinh chỉnh runtime config cho Telegram
-    let model_id = match config.provider.as_str() {
-        "openrouter" => "deepseek/deepseek-chat",
-        "openai" => "gpt-4o",
-        "anthropic" => "claude-3-5-sonnet-20240620",
-        "googlegemini" => "gemini-1.5-pro",
-        _ => "default",
-    }.to_string();
-
     let runtime_config = RuntimeConfig {
         provider: config.provider,
-        model_id,
+        model_id: config.model_id,
         api_key: config.api_key,
         tavily_key: config.tavily_key,
     };
