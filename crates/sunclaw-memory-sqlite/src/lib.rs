@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
-use sunclaw_core::{AgentContext, AuditDecision, AuditEvent, AuditStore, CoreError, MemoryStore, Message, Role};
-use std::sync::Arc;
+use sunclaw_core::{AuditDecision, AuditEvent, AuditStore, CoreError, MemoryStore, Message, Role};
 
 pub struct SqliteStore {
     pool: Pool<Sqlite>,

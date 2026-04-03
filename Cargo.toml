@@ -12,6 +12,7 @@ members = [
   "crates/sunclaw-memory-sqlite",
   "crates/sunclaw-server",
   "crates/sunclaw-telegram",
+  "crates/sunclaw-mcp",
 ]
 resolver = "2"
 

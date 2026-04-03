@@ -11,11 +11,13 @@ sunclaw-app = { path = "../sunclaw-app" }
 sunclaw-core = { path = "../sunclaw-core" }
 sunclaw-telegram = { path = "../sunclaw-telegram" }
 sunclaw-orchestrator = { path = "../sunclaw-orchestrator" }
+sunclaw-runtime = { path = "../sunclaw-runtime" }
 dialoguer.workspace = true
 colored.workspace = true
 clap.workspace = true
 sysinfo.workspace = true
 dotenvy.workspace = true
+serde.workspace = true
 home = "0.5"
 toml = "0.8"
 ratatui = "0.26"

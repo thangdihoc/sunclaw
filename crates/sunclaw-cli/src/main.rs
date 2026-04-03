@@ -3,15 +3,14 @@ mod tui;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
+use dialoguer::{theme::ColorfulTheme, Password, Select};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use sysinfo::System;
-use serde::{Deserialize, Serialize};
 
 use sunclaw_app::{build_runtime, RuntimeConfig};
-use sunclaw_core::AgentContext;
 use sunclaw_telegram::TelegramBridge;
 use tui::run_tui;
 
@@ -48,7 +47,9 @@ struct Config {
 }
 
 fn get_config_path() -> PathBuf {
-    let mut path = home::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut path = home::home_dir().unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
     path.push(".sunclaw");
     if !path.exists() {
         fs::create_dir_all(&path).ok();
@@ -188,7 +189,7 @@ fn run_doctor() -> Result<()> {
     if config_path.exists() {
         println!("✅ File cấu hình: {} ({:?})", "Tìm thấy".green(), config_path);
     } else if Path::new(".env").exists() {
-        println!("⚠️  Cấu hình: {} (Đang dùng .env, khuyên dùng --onboard để đồng bộ)".yellow());
+        println!("{}", format!("⚠️  Cấu hình: {} (Đang dùng .env, khuyên dùng --onboard để đồng bộ)", "Sử dụng .env".yellow()));
     } else {
         println!("❌ Cấu hình: {}", "Không tìm thấy (Cần chạy sunclaw onboard)".red());
     }

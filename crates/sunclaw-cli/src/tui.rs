@@ -11,8 +11,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::sync::Arc;
-use sunclaw_app::RuntimeConfig;
-use sunclaw_core::{AgentContext, AgentOutcome};
 use sunclaw_runtime::Runtime;
 
 pub struct TuiApp {
@@ -31,7 +29,7 @@ impl TuiApp {
     }
 }
 
-pub async fn run_tui(runtime: Arc<Runtime>) -> io::Result<()> {
+pub async fn run_tui(_runtime: Arc<Runtime>) -> io::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

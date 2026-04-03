@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State, Json},
     http::{header, StatusCode, HeaderMap},
     middleware::{self, Next},
-    response::{IntoResponse, Response, Html},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
