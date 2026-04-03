@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use sunclaw_core::{
-    AgentContext, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message, ModelProvider,
-    Tool, ToolCall, ToolResult,
-};
+use sunclaw_core::{CoreError, Tool, ToolResult};
 use sunclaw_policy::AllowlistPolicy;
 use sunclaw_provider::{ModelRoute, MultiProvider, OpenAIProvider, RetryProvider};
 use sunclaw_runtime::{Runtime, RuntimeOptions};
@@ -86,6 +82,20 @@ struct EchoTool;
 impl Tool for EchoTool {
     fn name(&self) -> &'static str {
         "echo"
+    }
+
+    fn definition(&self) -> sunclaw_core::ToolDefinition {
+        sunclaw_core::ToolDefinition {
+            name: "echo".to_string(),
+            description: "Lặp lại nội dung đầu vào (dùng để kiểm tra)".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "input": { "type": "string" }
+                },
+                "required": ["input"]
+            }),
+        }
     }
 
     async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {

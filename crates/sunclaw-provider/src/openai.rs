@@ -26,8 +26,24 @@ impl OpenAIProvider {
 
 #[derive(Serialize)]
 struct ChatCompletionRequest {
-    model: String,
-    messages: Vec<ChatCompletionMessage>,
+    pub model: String,
+    pub messages: Vec<ChatCompletionMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<OpenAITool>>,
+}
+
+#[derive(Serialize)]
+pub struct OpenAITool {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub function: OpenAIFunction,
+}
+
+#[derive(Serialize)]
+pub struct OpenAIFunction {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -69,6 +85,7 @@ impl ModelProvider for OpenAIProvider {
         &self,
         _ctx: &AgentContext,
         messages: &[Message],
+        tools: &[sunclaw_core::ToolDefinition],
     ) -> Result<Decision, CoreError> {
         let req_messages = messages
             .iter()
@@ -82,9 +99,28 @@ impl ModelProvider for OpenAIProvider {
             })
             .collect();
 
+        let openai_tools = if tools.is_empty() {
+            None
+        } else {
+            Some(
+                tools
+                    .iter()
+                    .map(|t| OpenAITool {
+                        r#type: "function".to_string(),
+                        function: OpenAIFunction {
+                            name: t.name.clone(),
+                            description: t.description.clone(),
+                            parameters: t.parameters.clone(),
+                        },
+                    })
+                    .collect(),
+            )
+        };
+
         let request = ChatCompletionRequest {
             model: self.model_id.clone(),
             messages: req_messages,
+            tools: openai_tools,
         };
 
         let response = self

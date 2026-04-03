@@ -2393,6 +2393,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "dotenvy",
+ "serde",
+ "serde_json",
  "sunclaw-core",
  "sunclaw-memory-sqlite",
  "sunclaw-policy",
@@ -2420,6 +2422,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tiktoken-rs",
 ]
@@ -2485,6 +2488,7 @@ dependencies = [
  "serde_json",
  "sunclaw-app",
  "sunclaw-core",
+ "sunclaw-runtime",
  "tokio",
  "tower-http 0.5.2",
  "tracing",
@@ -2505,6 +2509,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "dotenvy",
+ "sunclaw-app",
  "sunclaw-core",
  "sunclaw-runtime",
  "teloxide",

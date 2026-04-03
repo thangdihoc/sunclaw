@@ -15,4 +15,5 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 sunclaw-app = { path = "../sunclaw-app" }
 sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-runtime = { path = "../sunclaw-runtime" }
 anyhow = { workspace = true }

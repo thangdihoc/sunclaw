@@ -170,7 +170,10 @@ impl Runtime {
                     all_messages.len(), pruned_messages.len(), limit);
             }
 
-            match self.provider.decide(ctx, &pruned_messages).await? {
+            // Collect tool definitions
+            let tool_definitions: Vec<_> = self.tools.values().map(|t| t.definition()).collect();
+
+            match self.provider.decide(ctx, &pruned_messages, &tool_definitions).await? {
                 Decision::Reply(text) => {
                     self.memory
                         .append_message(
@@ -276,6 +279,7 @@ mod tests {
             &self,
             _ctx: &AgentContext,
             _messages: &[Message],
+            _tools: &[sunclaw_core::ToolDefinition],
         ) -> Result<Decision, CoreError> {
             self.decisions
                 .lock()
@@ -349,6 +353,19 @@ mod tests {
     impl Tool for EchoTool {
         fn name(&self) -> &'static str {
             "echo"
+        }
+
+        fn definition(&self) -> sunclaw_core::ToolDefinition {
+            sunclaw_core::ToolDefinition {
+                name: "echo".to_string(),
+                description: "Echo the input back".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "input": { "type": "string" }
+                    }
+                }),
+            }
         }
 
         async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {

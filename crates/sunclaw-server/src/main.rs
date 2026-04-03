@@ -9,7 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use sunclaw_app::build_runtime;
-use sunclaw_core::{AgentContext, Role};
+use sunclaw_core::AgentContext;
 use sunclaw_runtime::Runtime;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -101,15 +101,15 @@ async fn chat_handler(
     };
 
     match state.runtime.run_once(&ctx, &payload.message).await {
-        Ok(outcome) => {
-            Json(ChatResponse {
-                output: outcome.output,
-                trace_id,
-            }).into_response()
-        }
+        Ok(outcome) => Json(ChatResponse {
+            output: outcome.output,
+            trace_id,
+        }).into_response(),
         Err(e) => {
             tracing::error!("Runtime error: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+            let status = StatusCode::INTERNAL_SERVER_ERROR;
+            let body = e.to_string();
+            (status, body).into_response()
         }
     }
 }

@@ -44,6 +44,23 @@ impl Tool for WebSearchTool {
         "web_search"
     }
 
+    fn definition(&self) -> sunclaw_core::ToolDefinition {
+        sunclaw_core::ToolDefinition {
+            name: "web_search".to_string(),
+            description: "Tìm kiếm thông tin trên internet để trả lời các câu hỏi về tin tức, sự kiện hiện tại hoặc kiến thức chuyên sâu.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Từ khóa tìm kiếm"
+                    }
+                },
+                "required": ["query"]
+            }),
+        }
+    }
+
     async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {
         if self.api_key == "secret" || self.api_key.is_empty() {
             return Ok(ToolResult {

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use teloxide::prelude::*;
-use teloxide::types::ChatId;
 use sunclaw_runtime::Runtime;
 use sunclaw_core::AgentContext;
 use anyhow::Result;

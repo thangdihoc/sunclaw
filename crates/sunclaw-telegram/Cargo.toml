@@ -8,8 +8,11 @@ license.workspace = true
 [dependencies]
 sunclaw-core = { path = "../sunclaw-core" }
 sunclaw-runtime = { path = "../sunclaw-runtime" }
+sunclaw-app = { path = "../sunclaw-app" }
 teloxide.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+dotenvy.workspace = true
 tracing = "0.1"
+tracing-subscriber = "0.3"
 async-trait.workspace = true

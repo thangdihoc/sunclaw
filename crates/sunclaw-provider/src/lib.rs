@@ -25,11 +25,12 @@ impl ModelProvider for RetryProvider {
         &self,
         ctx: &AgentContext,
         messages: &[Message],
+        tools: &[sunclaw_core::ToolDefinition],
     ) -> Result<Decision, CoreError> {
         let mut last_err = None;
 
         for attempt in 0..=self.max_retries {
-            match self.inner.decide(ctx, messages).await {
+            match self.inner.decide(ctx, messages, tools).await {
                 Ok(decision) => return Ok(decision),
                 Err(e) => {
                     last_err = Some(e);
@@ -103,6 +104,7 @@ impl ModelProvider for MultiProvider {
         &self,
         ctx: &AgentContext,
         messages: &[Message],
+        tools: &[sunclaw_core::ToolDefinition],
     ) -> Result<Decision, CoreError> {
         let route = self.choose_route(ctx)?;
         let mut provider_errors = Vec::new();
@@ -113,7 +115,7 @@ impl ModelProvider for MultiProvider {
                 continue;
             };
 
-            match backend.decide(ctx, messages).await {
+            match backend.decide(ctx, messages, tools).await {
                 Ok(decision) => return Ok(decision),
                 Err(CoreError::Provider(err)) => {
                     provider_errors.push(format!("{backend_id}: {err}"))
@@ -147,6 +149,7 @@ mod tests {
             &self,
             _ctx: &AgentContext,
             _messages: &[Message],
+            _tools: &[sunclaw_core::ToolDefinition],
         ) -> Result<Decision, CoreError> {
             self.responses
                 .lock()
@@ -189,7 +192,9 @@ mod tests {
                     skill: None,
                     model_profile: Some("default".to_string()),
                     role: None,
+                    max_tokens: None,
                 },
+                &[],
                 &[],
             )
             .await

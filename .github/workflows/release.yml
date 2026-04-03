@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: sunclaw-cli
+            asset_name: sunclaw-linux-amd64
+          - os: windows-latest
+            artifact_name: sunclaw-cli.exe
+            asset_name: sunclaw-windows-amd64.exe
+          - os: macos-latest
+            artifact_name: sunclaw-cli
+            asset_name: sunclaw-macos-amd64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build
+      run: cargo build --release -p sunclaw-cli
+
+    - name: Rename and Upload Asset
+      shell: bash
+      run: |
+        cd target/release
+        mv ${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+        gh release upload ${{ github.ref_name }} ${{ matrix.asset_name }} --clobber
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

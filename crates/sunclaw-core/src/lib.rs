@@ -88,6 +88,13 @@ pub enum AuditDecision {
     Denied(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value, // JSON Schema
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error("provider error: {0}")]
@@ -104,13 +111,18 @@ pub enum CoreError {
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
-    async fn decide(&self, ctx: &AgentContext, messages: &[Message])
-        -> Result<Decision, CoreError>;
+    async fn decide(
+        &self,
+        ctx: &AgentContext,
+        messages: &[Message],
+        tools: &[ToolDefinition],
+    ) -> Result<Decision, CoreError>;
 }
 
 #[async_trait]
 pub trait Tool: Send + Sync {
     fn name(&self) -> &'static str;
+    fn definition(&self) -> ToolDefinition;
     async fn run(&self, input: &str) -> Result<ToolResult, CoreError>;
 }
 
