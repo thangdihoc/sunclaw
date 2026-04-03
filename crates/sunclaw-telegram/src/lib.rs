@@ -53,6 +53,9 @@ impl Bridge for TelegramBridge {
                     return Ok(());
                 }
 
+                // Gửi trạng thái đang gõ (Typing...)
+                let _ = bot.send_chat_action(chat_id, teloxide::types::ChatAction::Typing).await;
+
                 let trace_id = format!("tg-{}", chat_id);
                 let ctx = AgentContext {
                     trace_id,
@@ -64,10 +67,14 @@ impl Bridge for TelegramBridge {
 
                 match runtime.run_once(&ctx, user_text).await {
                     Ok(outcome) => {
-                        bot.send_message(chat_id, outcome.output).await?;
+                        bot.send_message(chat_id, format!("*🤖 Sunclaw AI*\n\n{}", outcome.output))
+                            .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                            .await?;
                     }
                     Err(e) => {
-                        bot.send_message(chat_id, format!("❌ Lỗi: {}", e)).await?;
+                        bot.send_message(chat_id, format!("❌ *Lỗi:* `{}`", e))
+                            .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                            .await?;
                     }
                 }
                 Ok(())

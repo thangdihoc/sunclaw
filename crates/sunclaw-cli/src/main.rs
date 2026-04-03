@@ -1,26 +1,85 @@
+mod tui;
+
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use colored::*;
 use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use sysinfo::System;
+use serde::{Deserialize, Serialize};
 
 use sunclaw_app::{build_runtime, RuntimeConfig};
 use sunclaw_core::AgentContext;
 use sunclaw_telegram::TelegramBridge;
+use tui::run_tui;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Kích hoạt chế độ thiết lập (Cấu hình lại API Keys)
-    #[arg(short, long)]
-    setup: bool,
+#[command(name = "sunclaw")]
+#[command(author = "Sunclaw Team")]
+#[command(version = "0.1.0")]
+#[command(about = "Hệ thống AI Agent Hiệu năng cao (Rust)", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
 
-    /// Chạy trực tiếp chế độ Telegram (nếu đã cấu hình)
+    /// Kiểm tra tình trạng hệ thống và cấu hình
     #[arg(short, long)]
-    telegram: bool,
+    doctor: bool,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Thiết lập cấu hình ban đầu
+    Onboard,
+    /// Chạy trực tiếp chế độ Telegram
+    Telegram,
+    /// Chat trực tiếp trên Terminal (Mặc định)
+    Chat,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+struct Config {
+    provider: String,
+    api_key: String,
+    tavily_key: Option<String>,
+    tele_token: Option<String>,
+}
+
+fn get_config_path() -> PathBuf {
+    let mut path = home::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push(".sunclaw");
+    if !path.exists() {
+        fs::create_dir_all(&path).ok();
+    }
+    path.push("config.toml");
+    path
+}
+
+fn load_config() -> Result<Config> {
+    let path = get_config_path();
+    if path.exists() {
+        let content = fs::read_to_string(path)?;
+        let config: Config = toml::from_str(&content)?;
+        Ok(config)
+    } else {
+        // Fallback to .env for backward compatibility
+        let _ = dotenvy::dotenv();
+        Ok(Config {
+            provider: std::env::var("SUNCLAW_PROVIDER").unwrap_or_else(|_| "openrouter".to_string()),
+            api_key: std::env::var("SUNCLAW_API_KEY").unwrap_or_default(),
+            tavily_key: std::env::var("TAVILY_API_KEY").ok(),
+            tele_token: std::env::var("TELEGRAM_BOT_TOKEN").ok(),
+        })
+    }
+}
+
+fn save_config(config: &Config) -> Result<()> {
+    let path = get_config_path();
+    let content = toml::to_string_pretty(config)?;
+    fs::write(path, content)?;
+    Ok(())
 }
 
 fn show_header() {
@@ -57,13 +116,13 @@ fn show_system_info() {
     println!();
 }
 
-async fn run_setup(theme: &ColorfulTheme) -> Result<()> {
-    println!("{}", ">>> PHẦN THIẾT LẬP CẤU HÌNH <<<".bright_magenta().bold());
+async fn run_onboard(theme: &ColorfulTheme) -> Result<()> {
+    println!("{}", ">>> PHẦN THIẾT LẬP CẤU HÌNH (ONBOARDING) <<<".bright_magenta().bold());
 
     // 1. Chọn Nhà cung cấp AI
     let providers = &["OpenRouter", "OpenAI", "Anthropic", "Google Gemini"];
     let provider_idx = Select::with_theme(theme)
-        .with_prompt("Chọn nhà cung cấp AI")
+        .with_prompt("Chọn nhà cung cấp AI mặc định")
         .items(providers)
         .default(0)
         .interact()?;
@@ -77,7 +136,7 @@ async fn run_setup(theme: &ColorfulTheme) -> Result<()> {
 
     // 3. Nhập Tavily Key
     let tavily_key: String = Password::with_theme(theme)
-        .with_prompt("Nhập Tavily API Key (Để trống nếu không dùng)")
+        .with_prompt("Nhập Tavily API Key (Dùng cho Web Search, để trống nếu không dùng)")
         .allow_empty_password(true)
         .interact()?;
 
@@ -87,55 +146,94 @@ async fn run_setup(theme: &ColorfulTheme) -> Result<()> {
         .allow_empty_password(true)
         .interact()?;
 
-    // Lưu vào file .env
-    let mut env_content = format!(
-        "SUNCLAW_PROVIDER={}\nSUNCLAW_API_KEY={}\n",
-        provider_name, api_key
-    );
-    if !tavily_key.is_empty() {
-        env_content.push_str(&format!("TAVILY_API_KEY={}\n", tavily_key));
-    }
-    if !tele_token.is_empty() {
-        env_content.push_str(&format!("TELEGRAM_BOT_TOKEN={}\n", tele_token));
+    let config = Config {
+        provider: provider_name,
+        api_key,
+        tavily_key: if tavily_key.is_empty() { None } else { Some(tavily_key) },
+        tele_token: if tele_token.is_empty() { None } else { Some(tele_token) },
+    };
+
+    save_config(&config)?;
+    println!("\n{}", format!("✅ Đã lưu cấu hình vào: {:?}", get_config_path()).green().bold());
+    
+    Ok(())
+}
+
+fn run_doctor() -> Result<()> {
+    println!("{}", "🔍 Đang kiểm tra hệ thống Sunclaw...".bright_cyan().bold());
+    println!();
+
+    // 1. Kiểm tra file config
+    let config_path = get_config_path();
+    if config_path.exists() {
+        println!("✅ File cấu hình: {} ({:?})", "Tìm thấy".green(), config_path);
+    } else if Path::new(".env").exists() {
+        println!("⚠️  Cấu hình: {} (Đang dùng .env, khuyên dùng --onboard để đồng bộ)".yellow());
+    } else {
+        println!("❌ Cấu hình: {}", "Không tìm thấy (Cần chạy sunclaw onboard)".red());
     }
 
-    fs::write(".env", env_content)?;
-    println!("\n{}", "✅ Đã lưu cấu hình vào file .env!".green().bold());
-    
+    // 2. Kiểm tra Database
+    let db_path = "sunclaw.db";
+    if Path::new(db_path).exists() {
+        println!("✅ Database: {} ({})", "Kết nối tốt".green(), db_path);
+    } else {
+        println!("⚠️  Database: {} (Sẽ được tạo khi chạy Agent)", "Chưa khởi tạo".yellow());
+    }
+
+    println!();
+    println!("{}", "--- Hoàn tất kiểm tra ---".bright_black());
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let cli = Cli::parse();
     let theme = ColorfulTheme::default();
 
     show_header();
     show_system_info();
 
-    // Load .env
-    let _ = dotenvy::dotenv();
-
-    // Kiểm tra nếu cần setup
-    if args.setup || !Path::new(".env").exists() {
-        run_setup(&theme).await?;
-        // Reload .env sau khi setup
-        let _ = dotenvy::dotenv();
-    }
-
-    // Lấy cấu hình từ môi trường
-    let provider = std::env::var("SUNCLAW_PROVIDER").unwrap_or_else(|_| "openrouter".to_string());
-    let api_key = std::env::var("SUNCLAW_API_KEY").unwrap_or_default();
-    let tavily_key = std::env::var("TAVILY_API_KEY").ok();
-    let tele_token = std::env::var("TELEGRAM_BOT_TOKEN").ok();
-
-    if api_key.is_empty() {
-        println!("{}", "❌ Thiếu API Key! Vui lòng chạy với flag --setup để cấu hình.".red());
+    if cli.doctor {
+        run_doctor()?;
         return Ok(());
     }
 
-    // Mặc định chọn model cho nhanh nếu đã có config
-    let model_id = match provider.as_str() {
+    match cli.command {
+        Some(Commands::Onboard) => {
+            run_onboard(&theme).await?;
+            return Ok(());
+        }
+        Some(Commands::Telegram) => {
+             let config = load_config()?;
+             if config.api_key.is_empty() {
+                 println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
+                 return Ok(());
+             }
+             start_telegram(config, &theme).await?;
+        }
+        Some(Commands::Chat) | None => {
+            let config = load_config()?;
+            if config.api_key.is_empty() {
+                 println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
+                 return Ok(());
+            }
+            
+            // Nếu người dùng không chỉ định lệnh và file config chưa tồn tại, gợi ý onboard
+            if !get_config_path().exists() && !Path::new(".env").exists() {
+                 run_onboard(&theme).await?;
+            }
+
+            start_terminal_chat(config, &theme).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme) -> Result<()> {
+    // Mặc định chọn model
+    let model_id = match config.provider.as_str() {
         "openrouter" => "deepseek/deepseek-chat",
         "openai" => "gpt-4o",
         "anthropic" => "claude-3-5-sonnet-20240620",
@@ -143,71 +241,54 @@ async fn main() -> Result<()> {
         _ => "default",
     }.to_string();
 
-    let config = RuntimeConfig {
-        provider,
+    let runtime_config = RuntimeConfig {
+        provider: config.provider,
         model_id,
-        api_key,
-        tavily_key,
+        api_key: config.api_key,
+        tavily_key: config.tavily_key,
     };
 
-    let runtime = Arc::new(build_runtime(Some(config)).await);
+    let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
 
-    // Chọn chế độ
-    let selection = if args.telegram { 1 } else {
-        let modes = &["Chat trên Terminal", "Chạy Telegram Bot"];
-        Select::with_theme(&theme)
-            .with_prompt("Chọn chế độ hoạt động")
-            .items(modes)
-            .default(0)
-            .interact()?
-    };
+    println!("\n--- 🗨️ Đang khởi động Sunclaw TUI (Ratatui) ---");
+    run_tui(runtime).await.map_err(|e| anyhow::anyhow!(e))?;
+    
+    Ok(())
+}
 
-    match selection {
-        0 => {
-            println!("\n--- 🗨️ Terminal Chat (Gõ 'quit' để thoát) ---");
-            loop {
-                let input: String = Input::with_theme(&theme)
-                    .with_prompt("Bạn".cyan().to_string())
-                    .interact_text()?;
+async fn start_telegram(config: Config, theme: &ColorfulTheme) -> Result<()> {
+    let token = config.tele_token.unwrap_or_else(|| {
+        Password::with_theme(theme)
+            .with_prompt("Nhập Telegram Bot Token")
+            .interact().expect("Cần Token để chạy Telegram!")
+    });
 
-                if input == "quit" || input == "exit" { break; }
-
-                let ctx = AgentContext {
-                    trace_id: "cli-chat".to_string(),
-                    skill: None,
-                    model_profile: Some("default".to_string()),
-                    role: None,
-                    max_tokens: None,
-                };
-
-                match runtime.run_once(&ctx, &input).await {
-                    Ok(outcome) => {
-                        println!("\n{} {}\n", "🤖 [AI]:".yellow().bold(), outcome.output);
-                        println!("{}", format!("(Số lượt: {}, Công cụ đã dùng: {})", outcome.turns, outcome.tool_calls).bright_black());
-                    }
-                    Err(e) => println!("\n{} {:?}\n", "❌ [Lỗi]:".red(), e),
-                }
-            }
-        }
-        1 => {
-            let token = tele_token.unwrap_or_else(|| {
-                Password::with_theme(&theme)
-                    .with_prompt("Nhập Telegram Bot Token")
-                    .interact().expect("Cần Token để chạy Telegram!")
-            });
-
-            if token.is_empty() {
-                 println!("{}", "❌ Thiếu Telegram Token! Vui lòng cấu hình qua --setup.".red());
-                 return Ok(());
-            }
-
-            println!("{}", "🚀 Đang khởi động Telegram Bot...".bright_green());
-            use sunclaw_core::Bridge;
-            let bridge = TelegramBridge::new(runtime, token, None);
-            bridge.start().await.map_err(|e| anyhow::anyhow!(e))?;
-        }
-        _ => unreachable!(),
+    if token.is_empty() {
+         println!("{}", "❌ Thiếu Telegram Token! Vui lòng cấu hình qua 'sunclaw onboard'.".red());
+         return Ok(());
     }
 
+    // Tinh chỉnh runtime config cho Telegram
+    let model_id = match config.provider.as_str() {
+        "openrouter" => "deepseek/deepseek-chat",
+        "openai" => "gpt-4o",
+        "anthropic" => "claude-3-5-sonnet-20240620",
+        "googlegemini" => "gemini-1.5-pro",
+        _ => "default",
+    }.to_string();
+
+    let runtime_config = RuntimeConfig {
+        provider: config.provider,
+        model_id,
+        api_key: config.api_key,
+        tavily_key: config.tavily_key,
+    };
+
+    let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
+
+    println!("{}", "🚀 Đang khởi động Telegram Bot...".bright_green());
+    use sunclaw_core::Bridge;
+    let bridge = TelegramBridge::new(runtime, token, None);
+    bridge.start().await.map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
 }

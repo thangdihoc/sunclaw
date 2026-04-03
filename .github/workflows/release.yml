@@ -1,4 +1,4 @@
-name: Release
+name: Release Binaries
 
 on:
   push:
@@ -7,40 +7,63 @@ on:
 
 jobs:
   build:
-    name: Build and Release
-    runs-on: ${{ matrix.os }}
+    name: Build - ${{ matrix.platform.os }} (${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
+        platform:
           - os: ubuntu-latest
-            artifact_name: sunclaw-cli
-            asset_name: sunclaw-linux-amd64
-          - os: windows-latest
-            artifact_name: sunclaw-cli.exe
-            asset_name: sunclaw-windows-amd64.exe
+            target: x86_64-unknown-linux-gnu
+            bin: sunclaw
           - os: macos-latest
-            artifact_name: sunclaw-cli
-            asset_name: sunclaw-macos-amd64
+            target: x86_64-apple-darwin
+            bin: sunclaw
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: sunclaw.exe
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
 
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.platform.target }} -p sunclaw-cli
 
-    - name: Build
-      run: cargo build --release -p sunclaw-cli
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p staging
+          mv target/${{ matrix.platform.target }}/release/sunclaw-cli staging/${{ matrix.platform.bin }}
+          cd staging
+          if [ "${{ matrix.platform.os }}" == "windows-latest" ]; then
+            zip ../sunclaw-${{ matrix.platform.target }}.zip ${{ matrix.platform.bin }}
+          else
+            tar -czf ../sunclaw-${{ matrix.platform.target }}.tar.gz ${{ matrix.platform.bin }}
+          fi
 
-    - name: Rename and Upload Asset
-      shell: bash
-      run: |
-        cd target/release
-        mv ${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-        gh release upload ${{ github.ref_name }} ${{ matrix.asset_name }} --clobber
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sunclaw-${{ matrix.platform.target }}
+          path: sunclaw-${{ matrix.platform.target }}.*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
