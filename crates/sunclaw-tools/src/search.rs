@@ -54,9 +54,7 @@ sunclaw_tool!(
     args,
     {
         if self_obj.api_key == "secret" || self_obj.api_key.is_empty() {
-            return Ok(ToolResult {
-                output: format!("[Mock Search] No API key provided. Search query was: {}", args.query),
-            });
+            return Ok(ToolResult::simple(&format!("[Mock Search] No API key provided. Search query was: {}", args.query)));
         }
 
         let request = TavilyRequest {
@@ -96,6 +94,6 @@ sunclaw_tool!(
             output.push_str(&format!("{}. [{}]({})\n{}\n\n", i + 1, res.title, res.url, res.content));
         }
 
-        Ok(ToolResult { output })
+        Ok(ToolResult::simple(&output))
     }
 );

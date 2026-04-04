@@ -1,0 +1,16 @@
+[package]
+name = "sunclaw-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sunclaw-core = { path = "../sunclaw-core" }
+sunclaw-sandbox = { path = "../sunclaw-sandbox" }
+sunclaw-mcp = { path = "../sunclaw-mcp" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = "0.1"
+anyhow = { workspace = true }
+walkdir = "2"

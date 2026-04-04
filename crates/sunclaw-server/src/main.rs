@@ -65,6 +65,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/traces", get(api_list_traces))
         .route("/api/v1/audit/:trace_id", get(api_get_audit))
         .route("/api/v1/messages/:trace_id", get(api_get_messages))
+        .route("/api/v1/missions", get(api_list_missions))
+        .route("/api/v1/missions/:id/status", post(api_update_mission_status))
+        .route("/api/v1/artifacts/:trace_id", get(api_list_artifacts))
         
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .layer(TraceLayer::new_for_http())
@@ -115,6 +118,36 @@ async fn api_get_audit(State(state): State<AppState>, Path(trace_id): Path<Strin
 async fn api_get_messages(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
     match state.runtime.memory().load_messages(&trace_id).await {
         Ok(messages) => Json(messages).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_list_missions(State(state): State<AppState>) -> impl IntoResponse {
+    match state.runtime.mission().list_missions().await {
+        Ok(missions) => Json(missions).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateMissionStatusRequest {
+    status: sunclaw_core::MissionStatus,
+}
+
+async fn api_update_mission_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(payload): Json<UpdateMissionStatusRequest>,
+) -> impl IntoResponse {
+    match state.runtime.mission().update_mission_status(&id, payload.status).await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_list_artifacts(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
+    match state.runtime.artifacts().list_artifacts_by_trace(&trace_id).await {
+        Ok(artifacts) => Json(artifacts).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

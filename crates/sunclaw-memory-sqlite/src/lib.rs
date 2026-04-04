@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
-use sunclaw_core::{AuditDecision, AuditEvent, AuditStore, CoreError, MemoryStore, Message, Role};
+use sunclaw_core::{AuditDecision, AuditEvent, AuditStore, CoreError, MemoryStore, Message, Role, Mission, MissionStatus, MissionStore, Artifact, ArtifactStore};
 
 pub struct SqliteStore {
     pool: Pool<Sqlite>,
@@ -61,6 +61,37 @@ impl SqliteStore {
         .execute(&self.pool)
         .await
         .map_err(|e| CoreError::Memory(format!("Failed to create traces table: {e}")))?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS missions (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL,
+                assign_to TEXT, -- AgentRole serialized
+                sub_tasks TEXT,
+                parent_id TEXT,
+                trace_id TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to create missions table: {e}")))?;
+        
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS artifacts (
+                id TEXT PRIMARY KEY,
+                trace_id TEXT NOT NULL,
+                artifact_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                data TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to create artifacts table: {e}")))?;
 
         Ok(())
     }
@@ -197,6 +228,160 @@ impl sunclaw_core::TraceStore for SqliteStore {
             metadata: r.metadata.and_then(|m| serde_json::from_str(&m).ok()),
         }).collect())
     }
+}
+
+#[async_trait]
+impl MissionStore for SqliteStore {
+    async fn create_mission(&self, mission: Mission) -> Result<(), CoreError> {
+        let sub_tasks = serde_json::to_string(&mission.sub_tasks).unwrap_or_else(|_| "[]".to_string());
+        let status = serde_json::to_string(&mission.status).unwrap_or_else(|_| "\"Pending\"".to_string());
+        let assign_to = mission.assign_to.as_ref().map(|r| serde_json::to_string(r).unwrap_or_default());
+        
+        sqlx::query(
+            "INSERT INTO missions (id, title, description, status, assign_to, sub_tasks, parent_id, trace_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(mission.id)
+        .bind(mission.title)
+        .bind(mission.description)
+        .bind(status)
+        .bind(assign_to)
+        .bind(sub_tasks)
+        .bind(mission.parent_id)
+        .bind(mission.trace_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to create mission: {e}")))?;
+        Ok(())
+    }
+
+    async fn update_mission_status(&self, id: &str, status: MissionStatus) -> Result<(), CoreError> {
+        let status_str = serde_json::to_string(&status).unwrap_or_else(|_| "\"Pending\"".to_string());
+        sqlx::query("UPDATE missions SET status = ? WHERE id = ?")
+            .bind(status_str)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| CoreError::Memory(format!("Failed to update mission: {e}")))?;
+        Ok(())
+    }
+
+    async fn get_mission(&self, id: &str) -> Result<Mission, CoreError> {
+        let row = sqlx::query_as::<_, MissionRow>(
+            "SELECT id, title, description, status, assign_to, sub_tasks, parent_id, trace_id FROM missions WHERE id = ?"
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to get mission: {e}")))?;
+
+        Ok(Mission {
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            status: serde_json::from_str(&row.status).unwrap_or(MissionStatus::Pending),
+            assign_to: row.assign_to.and_then(|r| serde_json::from_str(&r).ok()),
+            sub_tasks: serde_json::from_str(&row.sub_tasks).unwrap_or_default(),
+            parent_id: row.parent_id,
+            trace_id: row.trace_id,
+        })
+    }
+
+    async fn list_missions(&self) -> Result<Vec<Mission>, CoreError> {
+        let rows = sqlx::query_as::<_, MissionRow>(
+            "SELECT id, title, description, status, assign_to, sub_tasks, parent_id, trace_id FROM missions ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to list missions: {e}")))?;
+
+        Ok(rows.into_iter().map(|row| Mission {
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            status: serde_json::from_str(&row.status).unwrap_or(MissionStatus::Pending),
+            assign_to: row.assign_to.and_then(|r| serde_json::from_str(&r).ok()),
+            sub_tasks: serde_json::from_str(&row.sub_tasks).unwrap_or_default(),
+            parent_id: row.parent_id,
+            trace_id: row.trace_id,
+        }).collect())
+    }
+}
+
+#[async_trait]
+impl ArtifactStore for SqliteStore {
+    async fn create_artifact(&self, artifact: Artifact) -> Result<(), CoreError> {
+        sqlx::query(
+            "INSERT INTO artifacts (id, trace_id, artifact_type, title, data) 
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(artifact.id)
+        .bind(artifact.trace_id)
+        .bind(artifact.artifact_type)
+        .bind(artifact.title)
+        .bind(artifact.data)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to create artifact: {e}")))?;
+        Ok(())
+    }
+
+    async fn get_artifact(&self, id: &str) -> Result<Artifact, CoreError> {
+        let row = sqlx::query_as::<_, ArtifactRow>(
+            "SELECT id, trace_id, artifact_type, title, data FROM artifacts WHERE id = ?"
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to get artifact: {e}")))?;
+
+        Ok(Artifact {
+            id: row.id,
+            trace_id: row.trace_id,
+            artifact_type: row.artifact_type,
+            title: row.title,
+            data: row.data,
+        })
+    }
+
+    async fn list_artifacts_by_trace(&self, trace_id: &str) -> Result<Vec<Artifact>, CoreError> {
+        let rows = sqlx::query_as::<_, ArtifactRow>(
+            "SELECT id, trace_id, artifact_type, title, data FROM artifacts WHERE trace_id = ? ORDER BY created_at DESC"
+        )
+        .bind(trace_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to list artifacts: {e}")))?;
+
+        Ok(rows.into_iter().map(|row| Artifact {
+            id: row.id,
+            trace_id: row.trace_id,
+            artifact_type: row.artifact_type,
+            title: row.title,
+            data: row.data,
+        }).collect())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct ArtifactRow {
+    id: String,
+    trace_id: String,
+    artifact_type: String,
+    title: String,
+    data: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct MissionRow {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    assign_to: Option<String>,
+    sub_tasks: String,
+    parent_id: Option<String>,
+    trace_id: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]

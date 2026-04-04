@@ -6,6 +6,8 @@
     <title>Sunclaw AI | Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
@@ -61,6 +63,14 @@
             <a @click="view = 'traces'" :class="view === 'traces' ? 'bg-brand-500/10 text-brand-400 border-brand-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'" class="flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer">
                 <i data-lucide="list" class="w-5 h-5"></i>
                 <span class="font-medium">Traces (Log)</span>
+            </a>
+            <a @click="view = 'kanban'" :class="view === 'kanban' ? 'bg-brand-500/10 text-brand-400 border-brand-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'" class="flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer">
+                <i data-lucide="layout-list" class="w-5 h-5"></i>
+                <span class="font-medium">Nhiệm vụ (KanBan)</span>
+            </a>
+            <a @click="view = 'flow'" :class="view === 'flow' ? 'bg-brand-500/10 text-brand-400 border-brand-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'" class="flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer">
+                <i data-lucide="git-branch" class="w-5 h-5"></i>
+                <span class="font-medium">Luồng (Flow)</span>
             </a>
             <a @click="view = 'playground'" :class="view === 'playground' ? 'bg-brand-500/10 text-brand-400 border-brand-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'" class="flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer">
                 <i data-lucide="terminal" class="w-5 h-5"></i>
@@ -243,6 +253,35 @@
                                     </template>
                                 </div>
                             </div>
+
+                            <!-- Artifacts Section -->
+                            <div class="mt-8">
+                                <h4 class="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
+                                    <i data-lucide="package" class="w-4 h-4"></i>
+                                    Kết quả lớn (Artifacts)
+                                </h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <template x-if="artifacts.length === 0">
+                                        <div class="md:col-span-2 p-6 text-center border border-dashed border-slate-800 rounded-xl">
+                                            <p class="text-slate-500 text-sm italic">Không có Artifact nào được tạo.</p>
+                                        </div>
+                                    </template>
+                                    <template x-for="art in artifacts" :key="art.id">
+                                        <div class="glass p-4 rounded-xl hover:border-brand-500/50 transition-all group">
+                                            <div class="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <span class="text-[10px] uppercase font-bold text-brand-400" x-text="art.artifact_type"></span>
+                                                    <h5 class="font-bold text-sm" x-text="art.title"></h5>
+                                                </div>
+                                                <button @click="viewArtifact(art)" class="p-1.5 bg-brand-500/10 text-brand-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                            <p class="text-[10px] text-slate-500 font-mono truncate" x-text="art.id"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
                         </div>
                     </template>
 
@@ -255,6 +294,110 @@
                             <p class="text-slate-500 mt-2 max-w-sm">Chọn một trace từ danh sách bên trái để xem chi tiết quá trình suy nghĩ và kết quả công cụ.</p>
                         </div>
                     </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: KanBan (Tasks) -->
+        <div x-show="view === 'kanban'" x-transition class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-[70vh]">
+                <!-- To Do -->
+                <div class="flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <h4 class="font-bold flex items-center gap-2">
+                            <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
+                            Chưa làm (To Do)
+                        </h4>
+                        <span class="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400" x-text="tasks.todo.length"></span>
+                    </div>
+                    <div id="todo-list" class="flex-1 glass rounded-2xl p-4 space-y-3 overflow-y-auto bg-dark-800/30">
+                        <template x-for="task in tasks.todo" :key="task.id">
+                            <div :data-id="task.id" class="p-4 bg-dark-700/50 rounded-xl border border-white/5 cursor-grab active:cursor-grabbing hover:border-brand-500/30 transition-all shadow-sm">
+                                <p class="text-sm font-semibold mb-2" x-text="task.title"></p>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] font-mono text-slate-500" x-text="task.id"></span>
+                                    <span class="text-[10px] px-2 py-0.5 bg-slate-800 rounded text-slate-400" x-text="task.skill"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- In Progress -->
+                <div class="flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <h4 class="font-bold flex items-center gap-2 text-brand-400">
+                            <span class="w-2 h-2 bg-brand-500 rounded-full animate-pulse"></span>
+                            Đang làm (Doing)
+                        </h4>
+                        <span class="text-xs bg-brand-500/10 px-2 py-0.5 rounded text-brand-400" x-text="tasks.doing.length"></span>
+                    </div>
+                    <div id="doing-list" class="flex-1 glass rounded-2xl p-4 space-y-3 overflow-y-auto bg-brand-500/5 border-brand-500/10">
+                        <template x-for="task in tasks.doing" :key="task.id">
+                            <div :data-id="task.id" class="p-4 bg-brand-500/10 rounded-xl border border-brand-500/20 cursor-grab active:cursor-grabbing shadow-lg shadow-brand-500/5">
+                                <p class="text-sm font-bold text-white mb-2" x-text="task.title"></p>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] font-mono text-brand-300" x-text="task.id"></span>
+                                    <div class="flex items-center gap-1">
+                                        <div class="w-1 h-1 bg-brand-400 rounded-full animate-ping"></div>
+                                        <span class="text-[10px] text-brand-400">Processing...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Done -->
+                <div class="flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <h4 class="font-bold flex items-center gap-2 text-emerald-400">
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                            Hoàn thành (Done)
+                        </h4>
+                        <span class="text-xs bg-emerald-500/10 px-2 py-0.5 rounded text-emerald-400" x-text="tasks.done.length"></span>
+                    </div>
+                    <div id="done-list" class="flex-1 glass rounded-2xl p-4 space-y-3 overflow-y-auto bg-emerald-500/5 border-emerald-500/10">
+                        <template x-for="task in tasks.done" :key="task.id">
+                            <div :data-id="task.id" class="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10 opacity-70 hover:opacity-100 transition-all">
+                                <div class="flex items-start justify-between gap-2 mb-2">
+                                     <p class="text-sm line-through text-slate-400" x-text="task.title"></p>
+                                     <i data-lucide="check-check" class="w-4 h-4 text-emerald-500 flex-shrink-0"></i>
+                                </div>
+                                <span class="text-[10px] font-mono text-slate-600" x-text="task.id"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Flow (Visual) -->
+        <div x-show="view === 'flow'" x-transition class="space-y-6">
+            <div class="glass rounded-2xl p-8 min-h-[60vh] flex flex-col items-center justify-center relative overflow-hidden">
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.05),transparent)] pointer-events-none"></div>
+                <h4 class="text-lg font-bold mb-8 flex items-center gap-2">
+                    <i data-lucide="git-branch" class="text-brand-500"></i>
+                    Sơ đồ Orchestration (Live)
+                </h4>
+                
+                <div id="mermaid-container" class="w-full bg-white/5 rounded-xl p-8 flex justify-center">
+                    <pre class="mermaid text-center" x-text="workflowDefinition"></pre>
+                </div>
+                
+                <div class="mt-8 flex gap-4">
+                    <div class="flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs">
+                        <div class="w-2 h-2 bg-brand-500 rounded-full"></div>
+                        <span>Supervisor</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span>Worker</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs">
+                        <div class="w-2 h-2 bg-purple-500 rounded-full"></div>
+                        <span>Tool/Skill</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -290,21 +433,59 @@
                 selectedTrace: null,
                 auditEvents: [],
                 messages: [],
+                artifacts: [],
+                selectedArtifact: null,
+                tasks: { todo: [], doing: [], done: [] },
+                workflowDefinition: "graph TD\n  S[Supervisor] --> W1[Worker A]\n  S --> W2[Worker B]\n  W1 --> T1[Tool: Search]\n  W2 --> T2[Tool: Write]",
 
                 init() {
                     lucide.createIcons();
                     this.refreshData();
+                    this.initSortable();
+                    this.initMermaid();
                     setInterval(() => this.refreshData(), 10000); // Tự động cập nhật mỗi 10s
+                },
+
+                initSortable() {
+                    const elTodo = document.getElementById('todo-list');
+                    const elDoing = document.getElementById('doing-list');
+                    const elDone = document.getElementById('done-list');
+                    
+                    const config = {
+                        group: 'tasks',
+                        animation: 150,
+                        onEnd: (evt) => {
+                            console.log("Task moved", evt.item.dataset.id, "to", evt.to.id);
+                            // Cập nhật trạng thái task qua API ở đây trong tương lai
+                        }
+                    };
+                    
+                    if (elTodo) new Sortable(elTodo, config);
+                    if (elDoing) new Sortable(elDoing, config);
+                    if (elDone) new Sortable(elDone, config);
+                },
+
+                initMermaid() {
+                    mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+                    this.$watch('view', value => {
+                        if (value === 'flow') {
+                            setTimeout(() => mermaid.contentLoaded(), 50);
+                        }
+                    });
                 },
 
                 title() {
                     return this.view === 'overview' ? 'Dashboard' : 
-                           (this.view === 'traces' ? 'Hồi ký Agent' : 'Playground');
+                           (this.view === 'traces' ? 'Hồi ký Agent' : 
+                           (this.view === 'kanban' ? 'Quản lý Nhiệm vụ' : 
+                           (this.view === 'flow' ? 'Sơ đồ Tư duy' : 'Playground')));
                 },
 
                 subtitle() {
                     return this.view === 'overview' ? 'Sức mạnh của Sunclaw hiển thị qua các tơ số.' : 
-                           (this.view === 'traces' ? 'Lục lại từng suy nghĩ và hành động của Agent.' : 'Thiết lập và thử nghiệm Agent mới.');
+                           (this.view === 'traces' ? 'Lục lại từng suy nghĩ và hành động của Agent.' :
+                           (this.view === 'kanban' ? 'Kéo thả để điều phối các tác vụ AI.' :
+                           (this.view === 'flow' ? 'Trực quan hóa mạng lưới cộng tác của Agent.' : 'Thiết lập và thử nghiệm Agent mới.')));
                 },
 
                 async refreshData() {
@@ -316,8 +497,11 @@
                         this.recentTraces = data.slice(0, 5);
                         this.stats.totalTraces = data.length;
                         
-                        // Count tool calls (rough estimation from history for now or from stats API)
-                        // In real impl, we'd have a /stats endpoint
+                        // Mocking KanBan tasks from traces
+                        this.tasks.todo = data.slice(0, 2).map(id => ({ id, title: `Nhiệm vụ xử lý ${id}`, skill: 'General' }));
+                        this.tasks.doing = data.slice(2, 3).map(id => ({ id, title: `Đang phân tích ${id}`, skill: 'Analysis' }));
+                        this.tasks.done = data.slice(3, 5).map(id => ({ id, title: `Hoàn thành tác vụ ${id}`, skill: 'Helper' }));
+
                         setTimeout(() => lucide.createIcons(), 10);
                     } catch (e) {
                         console.error("Fetch failed", e);
@@ -335,17 +519,26 @@
                 async fetchEvents(trace_id) {
                     this.auditEvents = [];
                     this.messages = [];
+                    this.artifacts = [];
                     try {
-                        const [evRes, msgRes] = await Promise.all([
+                        const [evRes, msgRes, artRes] = await Promise.all([
                             fetch(`/api/v1/audit/${trace_id}`),
-                            fetch(`/api/v1/messages/${trace_id}`)
+                            fetch(`/api/v1/messages/${trace_id}`),
+                            fetch(`/api/v1/artifacts/${trace_id}`)
                         ]);
                         this.auditEvents = await evRes.json();
                         this.messages = await msgRes.json();
+                        this.artifacts = await artRes.json();
                         setTimeout(() => lucide.createIcons(), 10);
                     } catch (e) {
                         console.error("Fetch trace details failed", e);
                     }
+                },
+
+                viewArtifact(art) {
+                    this.selectedArtifact = art;
+                    alert(`Hiển thị Artifact: ${art.title}\nLoại: ${art.artifact_type}\nDữ liệu: ${art.data.substring(0, 100)}...`);
+                    // Một modal thực thụ sẽ được thêm trong phiên bản tiếp theo
                 }
             }
         }

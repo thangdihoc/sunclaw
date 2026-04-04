@@ -367,8 +367,9 @@ async fn main() -> Result<()> {
                  println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
                  return Ok(());
             }
-
-            start_terminal_chat(config, &theme, true).await?;
+            
+            println!("{}", "🌐 Đang khởi chạy Sunclaw Desktop Dashboard...".bright_cyan());
+            serve::start_server(config.api_key, true).await?;
         }
     }
 

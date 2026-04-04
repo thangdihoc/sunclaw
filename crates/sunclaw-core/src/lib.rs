@@ -11,23 +11,25 @@ pub enum Role {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AgentRole {
+    Manager,
     Planner,
-    Executor,
+    Researcher,
+    Coder,
+    Writer,
     Reviewer,
+    Custom(String),
 }
 
 impl AgentRole {
     pub fn get_system_instructions(&self) -> String {
         match self {
-            AgentRole::Planner => {
-                "Bạn là Người Lập Kế Hoạch (Planner). Nhiệm vụ của bạn là chia nhỏ yêu cầu của người dùng thành các bước thực hiện cụ thể. Đừng tự thực hiện, chỉ lập kế hoạch.".to_string()
-            }
-            AgentRole::Executor => {
-                "Bạn là Người Thực Thi (Executor). Hãy thực hiện các bước trong kế hoạch bằng cách sử dụng các công cụ được cho phép. Tập trung vào độ chính xác của kết quả.".to_string()
-            }
-            AgentRole::Reviewer => {
-                "Bạn là Người Đánh Giá (Reviewer). Hãy kiểm tra kết quả từ Người Thực Thi đối chiếu với kế hoạch ban đầu. Đảm bảo mọi thứ đều đúng yêu cầu và an toàn.".to_string()
-            }
+            AgentRole::Manager => "Bạn là Quản lý (Manager). Nhiệm vụ của bạn là điều phối toàn bộ dự án, ra quyết định cuối cùng và đảm bảo tiến độ.".to_string(),
+            AgentRole::Planner => "Bạn là Người Lập Kế Hoạch (Planner). Hãy chia nhỏ yêu cầu người dùng thành các bước thực hiện cụ thể.".to_string(),
+            AgentRole::Researcher => "Bạn là Nhà Nghiên Cứu (Researcher). Hãy tìm kiếm và tổng hợp thông tin chính xác từ các nguồn tin cậy.".to_string(),
+            AgentRole::Coder => "Bạn là Lập Trình Viên (Coder). Hãy viết mã nguồn tối ưu, sạch sẽ và giải quyết các bài toán kỹ thuật.".to_string(),
+            AgentRole::Writer => "Bạn là Người Viết Lách (Writer). Hãy biên soạn nội dung, báo cáo hoặc tài liệu một cách chuyên nghiệp.".to_string(),
+            AgentRole::Reviewer => "Bạn là Người Đánh Giá (Reviewer). Hãy kiểm tra kết quả của các Agent khác để đảm bảo chất lượng.".to_string(),
+            AgentRole::Custom(s) => format!("Bạn đang đảm nhận vai trò: {}. Hãy thực hiện nhiệm vụ theo đúng mô tả vai trò.", s),
         }
     }
 }
@@ -41,7 +43,6 @@ pub struct Message {
 impl Message {
     pub fn estimate_tokens(&self) -> usize {
         let bpe = cl100k_base().unwrap();
-        // Base tokens for every message (role, content formatting)
         let mut tokens = 3; 
         tokens += bpe.encode_with_special_tokens(&self.content).len();
         tokens
@@ -57,6 +58,16 @@ pub struct ToolCall {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolResult {
     pub output: String,
+    pub artifacts: Vec<Artifact>,
+}
+
+impl ToolResult {
+    pub fn simple(output: &str) -> Self {
+        Self {
+            output: output.to_string(),
+            artifacts: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,10 +99,62 @@ pub enum AuditDecision {
     Denied(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MissionStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMetadata {
+    pub id: String,
+    pub name: String,
+    pub role: AgentRole,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Mission {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: MissionStatus,
+    pub assign_to: Option<AgentRole>,
+    pub sub_tasks: Vec<String>, // IDs of sub-missions
+    pub parent_id: Option<String>,
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Artifact {
+    pub id: String,
+    pub trace_id: String,
+    pub artifact_type: String, // 'file', 'chart', 'json', 'report'
+    pub title: String,
+    pub data: String, // Trình bày dưới dạng markdown hoặc base64
+}
+
+#[async_trait]
+pub trait ArtifactStore: Send + Sync {
+    async fn create_artifact(&self, artifact: Artifact) -> Result<(), CoreError>;
+    async fn get_artifact(&self, id: &str) -> Result<Artifact, CoreError>;
+    async fn list_artifacts_by_trace(&self, trace_id: &str) -> Result<Vec<Artifact>, CoreError>;
+}
+
+#[async_trait]
+pub trait MissionStore: Send + Sync {
+    async fn create_mission(&self, mission: Mission) -> Result<(), CoreError>;
+    async fn update_mission_status(&self, id: &str, status: MissionStatus) -> Result<(), CoreError>;
+    async fn get_mission(&self, id: &str) -> Result<Mission, CoreError>;
+    async fn list_missions(&self) -> Result<Vec<Mission>, CoreError>;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceEvent {
     pub trace_id: String,
-    pub event_type: String, // e.g., "thought", "tool_call", "tool_result", "error"
+    pub event_type: String, 
     pub content: String,
     pub metadata: Option<serde_json::Value>,
 }
@@ -100,7 +163,7 @@ pub struct TraceEvent {
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
-    pub parameters: serde_json::Value, // JSON Schema
+    pub parameters: serde_json::Value,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -163,29 +226,6 @@ pub trait TraceStore: Send + Sync {
     async fn load_traces(&self, trace_id: &str) -> Result<Vec<TraceEvent>, CoreError>;
 }
 
-#[macro_export]
-macro_rules! sunclaw_tool {
-    ($struct_name:ident, $args_type:ty, $name:expr, $desc:expr, $self_name:ident, $args_name:ident, $exec:block) => {
-        #[async_trait]
-        impl $crate::Tool for $struct_name {
-            fn name(&self) -> &'static str { $name }
-            fn definition(&self) -> $crate::ToolDefinition {
-                let schema = schemars::schema_for!($args_type);
-                $crate::ToolDefinition {
-                    name: $name.to_string(),
-                    description: $desc.to_string(),
-                    parameters: serde_json::to_value(schema).unwrap(),
-                }
-            }
-            async fn run(&self, input: &str) -> Result<$crate::ToolResult, $crate::CoreError> {
-                let $args_name: $args_type = serde_json::from_str(input)
-                    .map_err(|e| $crate::CoreError::Tool(format!("Invalid arguments for tool {}: {}", $name, e)))?;
-                let $self_name = self;
-                $exec
-            }
-        }
-    };
-}
 #[async_trait]
 pub trait Bridge: Send + Sync {
     fn name(&self) -> &'static str;
@@ -197,4 +237,32 @@ pub struct BridgeConfig {
     pub name: String,
     pub enabled: bool,
     pub settings: serde_json::Value,
+}
+#[macro_export]
+macro_rules! sunclaw_tool {
+    ($struct_name:ident, $args_struct:ident, $name:expr, $description:expr, $self_name:ident, $args_name:ident, $body:block) => {
+        #[async_trait]
+        impl sunclaw_core::Tool for $struct_name {
+            fn name(&self) -> &'static str {
+                $name
+            }
+
+            fn definition(&self) -> sunclaw_core::ToolDefinition {
+                sunclaw_core::ToolDefinition {
+                    name: $name.to_string(),
+                    description: $description.to_string(),
+                    parameters: serde_json::to_value(
+                        schemars::schema_for!($args_struct)
+                    ).unwrap_or(serde_json::json!({})),
+                }
+            }
+
+            async fn run(&self, input: &str) -> Result<sunclaw_core::ToolResult, sunclaw_core::CoreError> {
+                let $self_name = self;
+                let $args_name: $args_struct = serde_json::from_str(input)
+                    .map_err(|e| sunclaw_core::CoreError::Tool(format!("Invalid input: {}", e)))?;
+                $body
+            }
+        }
+    };
 }

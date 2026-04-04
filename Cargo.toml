@@ -13,6 +13,8 @@ members = [
   "crates/sunclaw-server",
   "crates/sunclaw-telegram",
   "crates/sunclaw-mcp",
+  "crates/sunclaw-sandbox",
+  "crates/sunclaw-registry",
 ]
 resolver = "2"
 
@@ -39,6 +41,7 @@ dialoguer = "0.11"
 colored = "2"
 clap = { version = "4", features = ["derive"] }
 sysinfo = "0.30"
+extism = "1"
 
 [profile.release]
 lto = true

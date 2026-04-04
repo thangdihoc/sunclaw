@@ -67,8 +67,11 @@ pub async fn start_server(api_key: String, auto_open: bool) -> anyhow::Result<()
         .route("/api/v1/health", get(health_check))
         .route("/api/v1/chat", post(chat_handler))
         .route("/api/v1/traces", get(api_list_traces))
+        .route("/api/v1/missions", get(api_list_missions))
+        .route("/api/v1/mission", post(api_create_mission))
         .route("/api/v1/audit/:trace_id", get(api_get_audit))
         .route("/api/v1/trace/:trace_id", get(api_get_trace))
+        .route("/api/v1/trace_graph/:trace_id", get(api_get_trace_graph))
         .route("/api/v1/messages/:trace_id", get(api_get_messages))
         
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
@@ -127,9 +130,56 @@ async fn api_get_trace(State(state): State<AppState>, Path(trace_id): Path<Strin
     }
 }
 
+async fn api_get_trace_graph(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
+    match state.runtime.trace().load_traces(&trace_id).await {
+        Ok(traces) => {
+            // Chuyển đổi Traces thành định dạng Mermaid Flowchart đơn giản
+            let mut graph = "graph TD\n".to_string();
+            graph.push_str("  Start((Start)) --> Thought1\n");
+            
+            for (i, t) in traces.iter().enumerate() {
+                let id = format!("Node{}", i);
+                let label = t.content.replace("\"", "'");
+                let color = match t.event_type.as_str() {
+                    "tool_call" => "fill:#fef3c7,stroke:#fbbf24",
+                    "tool_result" => "fill:#f0fdf4,stroke:#4ade80",
+                    "error" => "fill:#fef2f2,stroke:#ef4444",
+                    _ => "fill:#ede9fe,stroke:#8b5cf6",
+                };
+                
+                graph.push_str(&format!("  {}[\"{}\"]\n", id, label));
+                graph.push_str(&format!("  style {} {}\n", id, color));
+                
+                if i > 0 {
+                    graph.push_str(&format!("  Node{} --> {}\n", i-1, id));
+                } else {
+                    graph.push_str(&format!("  Thought1[\"Bắt đầu suy nghĩ\"] --> {}\n", id));
+                }
+            }
+            
+            Json(serde_json::json!({ "mermaid": graph })).into_response()
+        },
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 async fn api_get_messages(State(state): State<AppState>, Path(trace_id): Path<String>) -> impl IntoResponse {
     match state.runtime.memory().load_messages(&trace_id).await {
         Ok(messages) => Json(messages).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_list_missions(State(state): State<AppState>) -> impl IntoResponse {
+    match state.runtime.mission().list_missions().await {
+        Ok(missions) => Json(missions).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn api_create_mission(State(state): State<AppState>, Json(mission): Json<sunclaw_core::Mission>) -> impl IntoResponse {
+    match state.runtime.mission().create_mission(mission).await {
+        Ok(_) => StatusCode::CREATED.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

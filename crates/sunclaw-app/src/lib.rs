@@ -7,6 +7,7 @@ use sunclaw_provider::{ModelRoute, MultiProvider, OpenAIProvider, RetryProvider}
 use sunclaw_runtime::{Runtime, RuntimeOptions};
 use sunclaw_tools::WebSearchTool;
 use sunclaw_memory_sqlite::SqliteStore;
+use sunclaw_registry::Registry;
 
 pub struct RuntimeConfig {
     pub provider: String, // "openrouter", "openai", "anthropic", "google"
@@ -64,9 +65,11 @@ pub async fn build_runtime(config: Option<RuntimeConfig>) -> Runtime {
     let policy = Arc::new(AllowlistPolicy::new(vec!["echo".into(), "web_search".into()]));
     let audit = sqlite_store.clone();
     let trace = sqlite_store.clone();
+    let mission = sqlite_store.clone();
+    let artifacts = sqlite_store.clone();
 
     let mut runtime =
-        Runtime::new(Arc::new(router), memory, policy, audit, trace).with_options(RuntimeOptions {
+        Runtime::new(Arc::new(router), memory, policy, audit, trace, mission, artifacts).with_options(RuntimeOptions {
             max_turns: 4,
             max_tool_calls: 2,
             max_context_tokens: 4096,
@@ -74,6 +77,14 @@ pub async fn build_runtime(config: Option<RuntimeConfig>) -> Runtime {
         });
     runtime.register_tool(Arc::new(EchoTool));
     runtime.register_tool(Arc::new(WebSearchTool::new(tavily_key)));
+
+    // Sử dụng Registry để nạp tự động toàn bộ Tool (WASM & MCP)
+    if let Ok(reg_tools) = Registry::load_tools("plugins") {
+        for tool in reg_tools {
+            runtime.register_tool(tool);
+        }
+    }
+
     runtime
 }
 
@@ -100,8 +111,6 @@ impl Tool for EchoTool {
     }
 
     async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {
-        Ok(ToolResult {
-            output: format!("[tool:echo] {input}"),
-        })
+        Ok(ToolResult::simple(&format!("[tool:echo] {input}")))
     }
 }

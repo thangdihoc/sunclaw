@@ -13,5 +13,8 @@ sunclaw-provider = { path = "../sunclaw-provider" }
 sunclaw-runtime = { path = "../sunclaw-runtime" }
 sunclaw-tools = { path = "../sunclaw-tools" }
 sunclaw-memory-sqlite = { path = "../sunclaw-memory-sqlite" }
+sunclaw-mcp = { path = "../sunclaw-mcp" }
+sunclaw-sandbox = { path = "../sunclaw-sandbox" }
+sunclaw-registry = { path = "../sunclaw-registry" }
 serde.workspace = true
 serde_json.workspace = true

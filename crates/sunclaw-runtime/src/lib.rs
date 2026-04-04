@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use sunclaw_core::{
     AgentContext, AuditDecision, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message,
-    ModelProvider, PolicyEngine, Role, Tool, TraceStore,
+    ModelProvider, PolicyEngine, Role, Tool, TraceStore, MissionStore, Mission, MissionStatus, ArtifactStore,
 };
 
 #[derive(Debug, Clone)]
@@ -38,6 +38,8 @@ pub struct Runtime {
     policy: Arc<dyn PolicyEngine>,
     audit: Arc<dyn AuditStore>,
     trace: Arc<dyn TraceStore>,
+    mission: Arc<dyn MissionStore>,
+    artifacts: Arc<dyn ArtifactStore>,
     tools: HashMap<String, Arc<dyn Tool>>,
     options: RuntimeOptions,
 }
@@ -87,6 +89,8 @@ impl Runtime {
         policy: Arc<dyn PolicyEngine>,
         audit: Arc<dyn AuditStore>,
         trace: Arc<dyn TraceStore>,
+        mission: Arc<dyn MissionStore>,
+        artifacts: Arc<dyn ArtifactStore>,
     ) -> Self {
         Self {
             provider,
@@ -94,6 +98,8 @@ impl Runtime {
             policy,
             audit,
             trace,
+            mission,
+            artifacts,
             tools: HashMap::new(),
             options: RuntimeOptions::default(),
         }
@@ -118,6 +124,14 @@ impl Runtime {
 
     pub fn trace(&self) -> Arc<dyn TraceStore> {
         self.trace.clone()
+    }
+
+    pub fn mission(&self) -> Arc<dyn MissionStore> {
+        self.mission.clone()
+    }
+
+    pub fn artifacts(&self) -> Arc<dyn ArtifactStore> {
+        self.artifacts.clone()
     }
 
 
@@ -253,6 +267,12 @@ impl Runtime {
                         metadata: None,
                     }).await?;
 
+                    // Lưu các Artifacts nếu có
+                    for mut art in result.artifacts.clone() {
+                        art.trace_id = ctx.trace_id.clone();
+                        let _ = self.artifacts.create_artifact(art).await;
+                    }
+
                     self.memory
                         .append_message(
                             &ctx.trace_id,
@@ -281,7 +301,7 @@ mod tests {
     use async_trait::async_trait;
     use sunclaw_core::{
         AgentContext, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message,
-        ModelProvider, PolicyEngine, Tool, ToolCall, ToolResult, TraceEvent, TraceStore,
+        ModelProvider, PolicyEngine, Tool, ToolCall, ToolResult, TraceEvent, TraceStore, Artifact, ArtifactStore,
     };
 
     use crate::{Runtime, RuntimeOptions};
@@ -317,6 +337,25 @@ mod tests {
             _tool_input: &str,
         ) -> Result<(), CoreError> {
             Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct InMemoryArtifact {
+        artifacts: Mutex<HashMap<String, Artifact>>,
+    }
+
+    #[async_trait]
+    impl ArtifactStore for InMemoryArtifact {
+        async fn create_artifact(&self, artifact: Artifact) -> Result<(), CoreError> {
+            self.artifacts.lock().unwrap().insert(artifact.id.clone(), artifact);
+            Ok(())
+        }
+        async fn get_artifact(&self, id: &str) -> Result<Artifact, CoreError> {
+            self.artifacts.lock().unwrap().get(id).cloned().ok_or(CoreError::Memory("not found".into()))
+        }
+        async fn list_artifacts_by_trace(&self, trace_id: &str) -> Result<Vec<Artifact>, CoreError> {
+            Ok(self.artifacts.lock().unwrap().values().filter(|a| a.trace_id == trace_id).cloned().collect())
         }
     }
 
@@ -397,6 +436,31 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct InMemoryMission {
+        missions: std::sync::Mutex<std::collections::HashMap<String, Mission>>,
+    }
+
+    #[async_trait]
+    impl MissionStore for InMemoryMission {
+        async fn create_mission(&self, mission: Mission) -> Result<(), CoreError> {
+            self.missions.lock().unwrap().insert(mission.id.clone(), mission);
+            Ok(())
+        }
+        async fn update_mission_status(&self, id: &str, status: MissionStatus) -> Result<(), CoreError> {
+            if let Some(m) = self.missions.lock().unwrap().get_mut(id) {
+                m.status = status;
+            }
+            Ok(())
+        }
+        async fn get_mission(&self, id: &str) -> Result<Mission, CoreError> {
+            self.missions.lock().unwrap().get(id).cloned().ok_or(CoreError::Memory("not found".into()))
+        }
+        async fn list_missions(&self) -> Result<Vec<Mission>, CoreError> {
+            Ok(self.missions.lock().unwrap().values().cloned().collect())
+        }
+    }
+
     struct EchoTool;
 
     #[async_trait]
@@ -440,9 +504,11 @@ mod tests {
         let policy = Arc::new(AllowAll);
         let audit = Arc::new(InMemoryAudit::default());
         let trace = Arc::new(InMemoryTrace::default());
+        let mission = Arc::new(InMemoryMission::default());
+        let artifacts = Arc::new(InMemoryArtifact::default());
 
         let mut runtime =
-            Runtime::new(provider, memory, policy, audit, trace).with_options(RuntimeOptions {
+            Runtime::new(provider, memory, policy, audit, trace, mission, artifacts).with_options(RuntimeOptions {
                 max_turns: 3,
                 max_tool_calls: 1,
                 max_context_tokens: 1000,

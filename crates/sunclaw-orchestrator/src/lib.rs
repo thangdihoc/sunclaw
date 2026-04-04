@@ -4,6 +4,9 @@ use serde_json::{json, Value};
 use sunclaw_core::{AgentContext, AgentRole, CoreError, Tool, ToolDefinition, ToolResult};
 use sunclaw_runtime::{Runtime, RuntimeOutcome};
 
+pub mod graph;
+pub use graph::{StatefulGraph, Node};
+
 /// AgentMember wraps a Sunclaw Runtime and exposes it as a Tool.
 /// This allows one Agent (the Supervisor) to call another Agent.
 pub struct AgentMember {
@@ -66,9 +69,7 @@ impl Tool for AgentMember {
         // Run the member agent
         let outcome = self.runtime.run_once(&self.context, task).await?;
 
-        Ok(ToolResult {
-            output: outcome.output,
-        })
+        Ok(ToolResult::simple(&outcome.output))
     }
 }
 
@@ -101,6 +102,47 @@ impl Orchestrator {
         supervisor_context.role = Some(AgentRole::Planner);
         
         self.supervisor_runtime.run_once(&supervisor_context, goal).await
+    }
+
+    /// Run an agent and then have a Reviewer evaluate the output.
+    /// If not satisfactory, it can retry or return an error.
+    pub async fn run_with_reflection(
+        &self,
+        ctx: &AgentContext,
+        input: &str,
+        max_retries: usize,
+    ) -> Result<RuntimeOutcome, CoreError> {
+        let mut current_input = input.to_string();
+        let mut last_outcome = None;
+
+        for i in 0..=max_retries {
+            let mut run_ctx = ctx.clone();
+            run_ctx.trace_id = format!("{}-try-{}", ctx.trace_id, i);
+            
+            let outcome = self.supervisor_runtime.run_once(&run_ctx, &current_input).await?;
+            
+            // Now reflect
+            let mut reviewer_ctx = ctx.clone();
+            reviewer_ctx.role = Some(AgentRole::Reviewer);
+            reviewer_ctx.trace_id = format!("{}-ref-{}", ctx.trace_id, i);
+            
+            let reflection_input = format!(
+                "Hãy đánh giá kết quả dưới đây cho yêu cầu: '{}'\n\nKết quả (Outcome):\n{}\n\nNếu đạt yêu cầu, trả về 'APPROVED'. Nếu chưa đạt, hãy nêu rõ lý do và yêu cầu sửa đổi.",
+                input, outcome.output
+            );
+            
+            let reflection = self.supervisor_runtime.run_once(&reviewer_ctx, &reflection_input).await?;
+            
+            if reflection.output.to_uppercase().contains("APPROVED") {
+                return Ok(outcome);
+            } else {
+                tracing::info!("Reflection failed on attempt {}: {}", i, reflection.output);
+                current_input = format!("Dựa trên phản hồi sau, hãy sửa kết quả cũ:\nPhản hồi: {}\n\nYêu cầu gốc: {}", reflection.output, input);
+                last_outcome = Some(outcome);
+            }
+        }
+
+        last_outcome.ok_or_else(|| CoreError::Runtime("Reflection failed after max retries".to_string()))
     }
 
     /// Run a sequential flow where each agent's output is the next agent's input.

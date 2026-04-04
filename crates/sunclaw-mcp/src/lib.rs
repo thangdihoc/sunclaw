@@ -3,12 +3,19 @@ use sunclaw_core::{Tool, ToolResult, CoreError};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct McpToolConfig {
     pub name: String,
     pub command: String,
     pub args: Vec<String>,
+}
+
+impl McpToolConfig {
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
 }
 
 pub struct McpTool {
@@ -24,7 +31,6 @@ impl McpTool {
 #[async_trait]
 impl Tool for McpTool {
     fn name(&self) -> &'static str {
-        // Trait yêu cầu &'static str, chúng ta cần leak chuỗi này vì nó được tạo động
         Box::leak(self.config.name.clone().into_boxed_str())
     }
 
@@ -35,26 +41,69 @@ impl Tool for McpTool {
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "input": { "type": "string" }
+                    "arguments": { "type": "object" }
                 }
             }),
         }
     }
 
     async fn run(&self, input: &str) -> Result<ToolResult, CoreError> {
-        // Giả lập gọi MCP server qua stdio (Đây là placeholder cho rmcp real logic)
-        let mut _child = Command::new(&self.config.command)
+        let mut child = Command::new(&self.config.command)
             .args(&self.config.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| CoreError::Tool(format!("Failed to spawn MCP server: {}", e)))?;
+            .map_err(|e| CoreError::Tool(format!("Failed to spawn MCP server {}: {}", self.config.name, e)))?;
 
-        // Ở đây sẽ có logic JSON-RPC qua stdio...
+        let mut stdin = child.stdin.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let mut reader = BufReader::new(stdout).lines();
+
+        // 1. Initialize MCP (Simplified JSON-RPC)
+        let init_msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": { "name": "sunclaw", "version": "0.2.0" }
+            }
+        });
         
-        Ok(ToolResult {
-            output: format!("MCP Tool result placeholder for {} with input {}", self.config.name, input),
-        })
+        stdin.write_all(format!("{}\n", init_msg).as_bytes()).await
+            .map_err(|e| CoreError::Tool(e.to_string()))?;
+
+        // Wait for init response
+        let _ = reader.next_line().await.map_err(|e| CoreError::Tool(e.to_string()))?;
+
+        // 2. Call tool
+        let args: serde_json::Value = serde_json::from_str(input).unwrap_or(serde_json::json!({}));
+        let call_msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": self.config.name,
+                "arguments": args["arguments"]
+            }
+        });
+
+        stdin.write_all(format!("{}\n", call_msg).as_bytes()).await
+            .map_err(|e| CoreError::Tool(e.to_string()))?;
+
+        if let Some(line) = reader.next_line().await.map_err(|e| CoreError::Tool(e.to_string()))? {
+            let res: serde_json::Value = serde_json::from_str(&line)
+                .map_err(|e| CoreError::Tool(format!("Invalid MCP response: {}", e)))?;
+            
+            let output = res["result"]["content"][0]["text"].as_str()
+                .unwrap_or("No output from MCP tool").to_string();
+
+            return Ok(ToolResult::simple(&output));
+        }
+
+        Err(CoreError::Tool("MCP server closed stream early".into()))
     }
 }
 
