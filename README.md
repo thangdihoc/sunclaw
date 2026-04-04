@@ -16,11 +16,19 @@ Chúng tôi đã đơn giản hóa quy trình cài đặt để bạn có thể 
 powershell -c "irm https://raw.githubusercontent.com/thangdihoc/sunclaw/main/scripts/install.ps1 | iex"
 ```
 
-**Sau khi cài đặt, hãy khởi chạy trình hướng dẫn thiết lập:**
+---
 
-```bash
-sunclaw onboard
-```
+## 🛠️ Cách sử dụng
+
+Sunclaw cung cấp một trải nghiệm **Hợp nhất (Unified CLI)** tương tự như các dự án hàng đầu:
+
+| Lệnh | Mô tả |
+| :--- | :--- |
+| `sunclaw onboard` | Trình hướng dẫn thiết lập cấu hình & API Key (Lần đầu). |
+| `sunclaw serve` | **Khởi chạy Web Dashboard & API Server** (Phong cách TinyAGI). |
+| `sunclaw chat` | Chat trực tiếp bằng giao diện Terminal (TUI). |
+| `sunclaw telegram` | Kích hoạt kết nối với Bot Telegram của bạn. |
+| `sunclaw --doctor` | Kiểm tra và chẩn đoán sức khỏe hệ thống. |
 
 ---
 

@@ -63,9 +63,10 @@ pub async fn build_runtime(config: Option<RuntimeConfig>) -> Runtime {
     let memory = sqlite_store.clone();
     let policy = Arc::new(AllowlistPolicy::new(vec!["echo".into(), "web_search".into()]));
     let audit = sqlite_store.clone();
+    let trace = sqlite_store.clone();
 
     let mut runtime =
-        Runtime::new(Arc::new(router), memory, policy, audit).with_options(RuntimeOptions {
+        Runtime::new(Arc::new(router), memory, policy, audit, trace).with_options(RuntimeOptions {
             max_turns: 4,
             max_tool_calls: 2,
             max_context_tokens: 4096,

@@ -22,6 +22,15 @@ clap.workspace = true
 sysinfo.workspace = true
 dotenvy.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+rust-embed = "8.0"
+mime_guess = "2.0"
+uuid = { version = "1", features = ["v4", "serde"] }
+open = "5.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 home = "0.5"
 toml = "0.8"
 ratatui = "0.26"

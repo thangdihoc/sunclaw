@@ -1,9 +1,10 @@
 mod tui;
+mod serve;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Password, Select, Input};
+use dialoguer::{theme::ColorfulTheme, Password, Select, Input, Confirm};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -37,7 +38,19 @@ enum Commands {
     /// Chạy trực tiếp chế độ Telegram
     Telegram,
     /// Chat trực tiếp trên Terminal (Mặc định)
-    Chat,
+    Chat {
+        /// Không tự động mở trình duyệt Dashboard
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Khởi chạy Web Dashboard và API Server
+    Serve {
+        /// Không tự động mở trình duyệt Dashboard
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Gỡ bỏ cài đặt Sunclaw (Xóa cấu hình và dữ liệu)
+    Uninstall,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -46,6 +59,7 @@ struct Config {
     api_key: String,
     tavily_key: Option<String>,
     tele_token: Option<String>,
+    tele_chat_id: Option<i64>,
     #[serde(default = "default_model")]
     model_id: String,
 }
@@ -191,12 +205,24 @@ async fn run_onboard(theme: &ColorfulTheme) -> Result<()> {
         .allow_empty_password(true)
         .interact()?;
 
+    let tele_chat_id: Option<i64> = if !tele_token.is_empty() {
+        let id_str: String = Input::with_theme(theme)
+            .with_prompt("Telegram Chat ID của bạn (Để bảo mật, Enter để bỏ qua)")
+            .allow_empty(true)
+            .interact_text()?;
+        
+        if id_str.is_empty() { None } else { id_str.parse().ok() }
+    } else {
+        None
+    };
+
     let config = Config {
         provider: provider_name.to_string(),
         api_key,
         model_id,
         tavily_key: if tavily_key.is_empty() { None } else { Some(tavily_key) },
         tele_token: if tele_token.is_empty() { None } else { Some(tele_token) },
+        tele_chat_id,
     };
 
     // Hiệu ứng lưu cấu hình
@@ -305,7 +331,26 @@ async fn main() -> Result<()> {
              }
              start_telegram(config, &theme).await?;
         }
-        Some(Commands::Chat) | None => {
+        Some(Commands::Serve) => {
+            let config = load_config()?;
+            if config.api_key.is_empty() {
+                 println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
+                 return Ok(());
+            }
+            println!("{}", "🌐 Đang khởi chạy máy chủ Web & Dashboard...".bright_cyan());
+            serve::start_server(config.api_key, match cli.command {
+                Some(Commands::Serve { no_open }) => !no_open,
+                _ => true,
+            }).await?;
+        }
+        Some(Commands::Uninstall) => {
+            run_uninstall(&theme).await?;
+        }
+        Some(Commands::Chat { no_open }) | None => {
+            let auto_open = match cli.command {
+                Some(Commands::Chat { no_open }) => !no_open,
+                _ => true,
+            };
             show_system_info();
             let config = load_config()?;
             if config.api_key.is_empty() {
@@ -320,14 +365,14 @@ async fn main() -> Result<()> {
                  return Ok(());
             }
 
-            start_terminal_chat(config, &theme).await?;
+            start_terminal_chat(config, &theme, auto_open).await?;
         }
     }
 
     Ok(())
 }
 
-async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme) -> Result<()> {
+async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme, auto_open: bool) -> Result<()> {
     let runtime_config = RuntimeConfig {
         provider: config.provider,
         model_id: config.model_id,
@@ -337,8 +382,52 @@ async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme) -> Result<(
 
     let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
 
+    // Tự động khởi chạy Web Dashboard trong nền (giống OpenClaw)
+    let api_key_clone = config.api_key.clone();
+    tokio::spawn(async move {
+        let _ = serve::start_server(api_key_clone, auto_open).await;
+    });
+
     println!("\n--- 🗨️ Đang khởi động Sunclaw TUI Dashboard ---");
+    println!("{}", format!("🌐 Web Dashboard cũng đang chạy tại http://localhost:18789").bright_black());
+    
     run_tui(runtime).await.map_err(|e| anyhow::anyhow!(e))?;
+    
+    Ok(())
+}
+
+async fn run_uninstall(theme: &ColorfulTheme) -> Result<()> {
+    use dialoguer::Confirm;
+    
+    println!("{}", "\n⚠️  CẢNH BÁO: QUY TRÌNH GỠ CÀI ĐẶT SUNCLAW ⚠️".bright_red().bold());
+    println!("{}", "Hành động này sẽ xóa vĩnh viễn toàn bộ cấu hình, API keys và lịch sử trò chuyện.\n".bright_black());
+
+    let proceed = Confirm::with_theme(theme)
+        .with_prompt("Bạn có CHẮC CHẮN muốn gỡ bỏ Sunclaw không?")
+        .default(false)
+        .interact()?;
+
+    if !proceed {
+        println!("{}", "☘️  Đã hủy bỏ. Dữ liệu của bạn vẫn an toàn.".green());
+        return Ok(());
+    }
+
+    // 1. Xóa thư mục cấu hình
+    let config_dir = get_config_dir();
+    if config_dir.exists() {
+        fs::remove_dir_all(&config_dir)?;
+        println!("✅ Đã xóa cấu hình tại {:?}", config_dir);
+    }
+
+    // 2. Xóa Database
+    let db_path = "sunclaw.db";
+    if Path::new(db_path).exists() {
+        fs::remove_file(db_path)?;
+        println!("✅ Đã xóa cơ sở dữ liệu ({})", db_path);
+    }
+
+    println!("\n{}", "✨ SUNCLAW ĐÃ ĐƯỢC GỠ BỎ THÀNH CÔNG ✨".bright_green().bold());
+    println!("{}", "Cảm ơn bạn đã sử dụng. Hẹn gặp lại!".bright_white());
     
     Ok(())
 }
@@ -365,8 +454,14 @@ async fn start_telegram(config: Config, theme: &ColorfulTheme) -> Result<()> {
     let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
 
     println!("{}", "🚀 Đang khởi động Telegram Bot...".bright_green());
+    if let Some(id) = config.tele_chat_id {
+        println!("🛡️ Chế độ bảo mật: Đã giới hạn cho Chat ID: {}", id.to_string().bright_yellow());
+    } else {
+        println!("⚠️ Cảnh báo: Bot đang mở công khai (Chưa giới hạn Chat ID)");
+    }
+    
     use sunclaw_core::Bridge;
-    let bridge = TelegramBridge::new(runtime, token, None);
+    let bridge = TelegramBridge::new(runtime, token, config.tele_chat_id);
     bridge.start().await.map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use sunclaw_core::{
     AgentContext, AuditDecision, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message,
-    ModelProvider, PolicyEngine, Role, Tool,
+    ModelProvider, PolicyEngine, Role, Tool, TraceStore,
 };
 
 #[derive(Debug, Clone)]
@@ -37,6 +37,7 @@ pub struct Runtime {
     memory: Arc<dyn MemoryStore>,
     policy: Arc<dyn PolicyEngine>,
     audit: Arc<dyn AuditStore>,
+    trace: Arc<dyn TraceStore>,
     tools: HashMap<String, Arc<dyn Tool>>,
     options: RuntimeOptions,
 }
@@ -85,12 +86,14 @@ impl Runtime {
         memory: Arc<dyn MemoryStore>,
         policy: Arc<dyn PolicyEngine>,
         audit: Arc<dyn AuditStore>,
+        trace: Arc<dyn TraceStore>,
     ) -> Self {
         Self {
             provider,
             memory,
             policy,
             audit,
+            trace,
             tools: HashMap::new(),
             options: RuntimeOptions::default(),
         }
@@ -111,6 +114,10 @@ impl Runtime {
 
     pub fn audit(&self) -> Arc<dyn AuditStore> {
         self.audit.clone()
+    }
+
+    pub fn trace(&self) -> Arc<dyn TraceStore> {
+        self.trace.clone()
     }
 
 
@@ -148,6 +155,14 @@ impl Runtime {
             // Collect tool definitions
             let tool_definitions: Vec<_> = self.tools.values().map(|t| t.definition()).collect();
 
+            // Ghi nhận suy nghĩ của Agent
+            self.trace.append_trace(sunclaw_core::TraceEvent {
+                trace_id: ctx.trace_id.clone(),
+                event_type: "thought".to_string(),
+                content: format!("Agent đang xem xét {} tin nhắn và {} công cụ.", pruned_messages.len(), tool_definitions.len()),
+                metadata: None,
+            }).await?;
+
             match self.provider.decide(ctx, &pruned_messages, &tool_definitions).await? {
                 Decision::Reply(text) => {
                     self.memory
@@ -173,6 +188,13 @@ impl Runtime {
                         )));
                     }
                     tool_calls += 1;
+
+                    self.trace.append_trace(sunclaw_core::TraceEvent {
+                        trace_id: ctx.trace_id.clone(),
+                        event_type: "tool_call".to_string(),
+                        content: format!("Yêu cầu sử dụng công cụ: {}", call.name),
+                        metadata: Some(serde_json::json!({ "input": call.input })),
+                    }).await?;
 
                     if let Err(err) = self.policy.can_call_tool(ctx, &call.name, &call.input).await {
                         self.audit
@@ -202,14 +224,15 @@ impl Runtime {
                     
                     // Execute tool with timeout
                     let result = match tokio::time::timeout(self.options.tool_timeout, tool.run(&call.input)).await {
-                        Ok(res) => res?,
-                        Err(_) => {
-                            return Err(CoreError::Tool(format!(
-                                "tool execution timed out after {:?}",
-                                self.options.tool_timeout
-                            )))
                         }
                     };
+
+                    self.trace.append_trace(sunclaw_core::TraceEvent {
+                        trace_id: ctx.trace_id.clone(),
+                        event_type: "tool_result".to_string(),
+                        content: format!("Kết quả từ công cụ {}: {}", call.name, result.output),
+                        metadata: None,
+                    }).await?;
 
                     self.memory
                         .append_message(
@@ -239,7 +262,7 @@ mod tests {
     use async_trait::async_trait;
     use sunclaw_core::{
         AgentContext, AuditEvent, AuditStore, CoreError, Decision, MemoryStore, Message,
-        ModelProvider, PolicyEngine, Tool, ToolCall, ToolResult,
+        ModelProvider, PolicyEngine, Tool, ToolCall, ToolResult, TraceEvent, TraceStore,
     };
 
     use crate::{Runtime, RuntimeOptions};
@@ -322,6 +345,22 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct InMemoryTrace {
+        events: Mutex<Vec<TraceEvent>>,
+    }
+
+    #[async_trait]
+    impl TraceStore for InMemoryTrace {
+        async fn append_trace(&self, event: TraceEvent) -> Result<(), CoreError> {
+            self.events.lock().unwrap().push(event);
+            Ok(())
+        }
+        async fn load_traces(&self, _trace_id: &str) -> Result<Vec<TraceEvent>, CoreError> {
+            Ok(self.events.lock().unwrap().clone())
+        }
+    }
+
     struct EchoTool;
 
     #[async_trait]
@@ -364,9 +403,10 @@ mod tests {
         let memory = Arc::new(InMemory::default());
         let policy = Arc::new(AllowAll);
         let audit = Arc::new(InMemoryAudit::default());
+        let trace = Arc::new(InMemoryTrace::default());
 
         let mut runtime =
-            Runtime::new(provider, memory, policy, audit).with_options(RuntimeOptions {
+            Runtime::new(provider, memory, policy, audit, trace).with_options(RuntimeOptions {
                 max_turns: 3,
                 max_tool_calls: 1,
                 max_context_tokens: 1000,

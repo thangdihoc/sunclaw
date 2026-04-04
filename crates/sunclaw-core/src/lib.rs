@@ -88,6 +88,14 @@ pub enum AuditDecision {
     Denied(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceEvent {
+    pub trace_id: String,
+    pub event_type: String, // e.g., "thought", "tool_call", "tool_result", "error"
+    pub content: String,
+    pub metadata: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolDefinition {
     pub name: String,
@@ -147,6 +155,12 @@ pub trait MemoryStore: Send + Sync {
     async fn load_messages(&self, trace_id: &str) -> Result<Vec<Message>, CoreError>;
     async fn append_message(&self, trace_id: &str, message: Message) -> Result<(), CoreError>;
     async fn list_traces(&self) -> Result<Vec<String>, CoreError>;
+}
+
+#[async_trait]
+pub trait TraceStore: Send + Sync {
+    async fn append_trace(&self, event: TraceEvent) -> Result<(), CoreError>;
+    async fn load_traces(&self, trace_id: &str) -> Result<Vec<TraceEvent>, CoreError>;
 }
 
 #[macro_export]

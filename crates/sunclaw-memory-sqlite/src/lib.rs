@@ -48,6 +48,20 @@ impl SqliteStore {
         .await
         .map_err(|e| CoreError::Memory(format!("Failed to create audit_events table: {e}")))?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                metadata TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to create traces table: {e}")))?;
+
         Ok(())
     }
 }
@@ -146,6 +160,51 @@ impl AuditStore for SqliteStore {
             },
         }).collect())
     }
+}
+
+#[async_trait]
+impl sunclaw_core::TraceStore for SqliteStore {
+    async fn append_trace(&self, event: sunclaw_core::TraceEvent) -> Result<(), CoreError> {
+        let metadata_str = event.metadata.map(|m| m.to_string());
+        
+        sqlx::query(
+            "INSERT INTO traces (trace_id, event_type, content, metadata) VALUES (?, ?, ?, ?)",
+        )
+        .bind(event.trace_id)
+        .bind(event.event_type)
+        .bind(event.content)
+        .bind(metadata_str)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to append trace: {e}")))?;
+
+        Ok(())
+    }
+
+    async fn load_traces(&self, trace_id: &str) -> Result<Vec<sunclaw_core::TraceEvent>, CoreError> {
+        let rows = sqlx::query_as::<_, TraceEventRow>(
+            "SELECT trace_id, event_type, content, metadata FROM traces WHERE trace_id = ? ORDER BY id ASC",
+        )
+        .bind(trace_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Memory(format!("Failed to load traces: {e}")))?;
+
+        Ok(rows.into_iter().map(|r| sunclaw_core::TraceEvent {
+            trace_id: r.trace_id,
+            event_type: r.event_type,
+            content: r.content,
+            metadata: r.metadata.and_then(|m| serde_json::from_str(&m).ok()),
+        }).collect())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct TraceEventRow {
+    trace_id: String,
+    event_type: String,
+    content: String,
+    metadata: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
