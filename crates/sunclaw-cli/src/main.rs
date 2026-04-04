@@ -20,7 +20,7 @@ use tui::run_tui;
 #[derive(Parser, Debug)]
 #[command(name = "sunclaw")]
 #[command(author = "Sunclaw Team")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Hệ thống AI Agent Hiệu năng cao (Rust)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
