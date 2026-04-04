@@ -83,8 +83,10 @@ mod tests {
                     trace_id: "x".to_string(),
                     skill: Some("general".to_string()),
                     model_profile: Some("default".to_string()),
+                    ..Default::default()
                 },
                 "search",
+                "hello world",
             )
             .await;
 

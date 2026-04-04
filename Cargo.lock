@@ -3007,7 +3007,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "sunclaw-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -3023,7 +3023,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3058,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "schemars 1.2.1",
@@ -3070,7 +3070,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3085,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-memory-sqlite"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3097,7 +3097,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-orchestrator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-policy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "sunclaw-core",
@@ -3121,7 +3121,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-provider"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "reqwest 0.12.28",
@@ -3133,16 +3133,17 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
+ "serde_json",
  "sunclaw-core",
  "tokio",
 ]
 
 [[package]]
 name = "sunclaw-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3162,14 +3163,14 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-skills"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "sunclaw-telegram"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3185,7 +3186,7 @@ dependencies = [
 
 [[package]]
 name = "sunclaw-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "reqwest 0.12.28",

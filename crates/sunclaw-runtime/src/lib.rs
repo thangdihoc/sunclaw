@@ -224,6 +224,25 @@ impl Runtime {
                     
                     // Execute tool with timeout
                     let result = match tokio::time::timeout(self.options.tool_timeout, tool.run(&call.input)).await {
+                        Ok(Ok(res)) => res,
+                        Ok(Err(e)) => {
+                            self.trace.append_trace(sunclaw_core::TraceEvent {
+                                trace_id: ctx.trace_id.clone(),
+                                event_type: "error".to_string(),
+                                content: format!("Lỗi công cụ {}: {}", call.name, e),
+                                metadata: None,
+                            }).await?;
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            let e = CoreError::Runtime(format!("tool execution timed out: {}", call.name));
+                             self.trace.append_trace(sunclaw_core::TraceEvent {
+                                trace_id: ctx.trace_id.clone(),
+                                event_type: "error".to_string(),
+                                content: format!("Hết thời gian chờ công cụ {}", call.name),
+                                metadata: None,
+                            }).await?;
+                            return Err(e);
                         }
                     };
 
@@ -327,6 +346,16 @@ mod tests {
                 .push(message);
             Ok(())
         }
+
+        async fn list_traces(&self) -> Result<Vec<String>, CoreError> {
+            Ok(self
+                .messages
+                .lock()
+                .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?
+                .keys()
+                .cloned()
+                .collect())
+        }
     }
 
     #[derive(Default)]
@@ -342,6 +371,13 @@ mod tests {
                 .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?
                 .push(event);
             Ok(())
+        }
+
+        async fn load_events(&self, _trace_id: &str) -> Result<Vec<AuditEvent>, CoreError> {
+            Ok(self.events
+                .lock()
+                .map_err(|e| CoreError::Memory(format!("lock error: {e}")))?
+                .clone())
         }
     }
 

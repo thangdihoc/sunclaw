@@ -331,32 +331,30 @@ async fn main() -> Result<()> {
              }
              start_telegram(config, &theme).await?;
         }
-        Some(Commands::Serve) => {
+        Some(Commands::Serve { no_open }) => {
             let config = load_config()?;
             if config.api_key.is_empty() {
                  println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
                  return Ok(());
             }
             println!("{}", "🌐 Đang khởi chạy máy chủ Web & Dashboard...".bright_cyan());
-            serve::start_server(config.api_key, match cli.command {
-                Some(Commands::Serve { no_open }) => !no_open,
-                _ => true,
-            }).await?;
+            serve::start_server(config.api_key, !no_open).await?;
         }
         Some(Commands::Uninstall) => {
             run_uninstall(&theme).await?;
         }
-        Some(Commands::Chat { no_open }) | None => {
-            let auto_open = match cli.command {
-                Some(Commands::Chat { no_open }) => !no_open,
-                _ => true,
-            };
+        Some(Commands::Chat { no_open }) => {
             show_system_info();
             let config = load_config()?;
             if config.api_key.is_empty() {
                  println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
                  return Ok(());
             }
+            start_terminal_chat(config, &theme, !no_open).await?;
+        }
+        None => {
+            show_system_info();
+            let config = load_config()?;
             
             // Nếu người dùng không chỉ định lệnh và file config chưa tồn tại, gợi ý onboard
             if !get_config_path().exists() {
@@ -364,8 +362,13 @@ async fn main() -> Result<()> {
                  run_onboard(&theme).await?;
                  return Ok(());
             }
+            
+            if config.api_key.is_empty() {
+                 println!("{}", "❌ Chưa cấu hình! Vui lòng chạy 'sunclaw onboard'.".red());
+                 return Ok(());
+            }
 
-            start_terminal_chat(config, &theme, auto_open).await?;
+            start_terminal_chat(config, &theme, true).await?;
         }
     }
 
@@ -373,6 +376,7 @@ async fn main() -> Result<()> {
 }
 
 async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme, auto_open: bool) -> Result<()> {
+    let api_key_clone = config.api_key.clone();
     let runtime_config = RuntimeConfig {
         provider: config.provider,
         model_id: config.model_id,
@@ -383,7 +387,6 @@ async fn start_terminal_chat(config: Config, _theme: &ColorfulTheme, auto_open: 
     let runtime = Arc::new(build_runtime(Some(runtime_config)).await);
 
     // Tự động khởi chạy Web Dashboard trong nền (giống OpenClaw)
-    let api_key_clone = config.api_key.clone();
     tokio::spawn(async move {
         let _ = serve::start_server(api_key_clone, auto_open).await;
     });

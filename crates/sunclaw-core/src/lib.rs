@@ -65,7 +65,7 @@ pub enum Decision {
     UseTool(ToolCall),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AgentContext {
     pub trace_id: String,
     pub skill: Option<String>,

@@ -9,7 +9,7 @@ use axum::{
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use sunclaw_app::build_runtime;
+use sunclaw_app::{build_runtime, RuntimeConfig};
 use sunclaw_core::AgentContext;
 use sunclaw_runtime::Runtime;
 use tower_http::trace::TraceLayer;
